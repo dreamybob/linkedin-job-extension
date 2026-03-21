@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
 
 const BUTTON_CLASS = "pm-job-saver-button";
 const POST_FLAG = "data-pm-job-saver-injected";
+const ACTION_BAR_FLAG = "data-pm-job-saver-action-injected";
 
 const SELECTORS = {
   postContainers: [
@@ -15,6 +16,8 @@ const SELECTORS = {
   actionBars: [
     ".feed-shared-social-action-bar",
     ".social-actions-bar",
+  ],
+  fallbackActionBars: [
     "div[role='toolbar']",
   ],
   seeMoreButtons: [
@@ -68,6 +71,62 @@ function allPostContainers() {
   return results;
 }
 
+function collectMatches(container, selectors) {
+  const seen = new Set();
+  const matches = [];
+
+  selectors.forEach((selector) => {
+    container.querySelectorAll(selector).forEach((node) => {
+      if (!seen.has(node)) {
+        seen.add(node);
+        matches.push(node);
+      }
+    });
+  });
+
+  return matches;
+}
+
+function isVisible(node) {
+  const style = window.getComputedStyle(node);
+  if (style.display === "none" || style.visibility === "hidden") {
+    return false;
+  }
+
+  return node.getClientRects().length > 0;
+}
+
+function looksLikeSocialActionBar(node) {
+  const text = node.textContent?.toLowerCase() || "";
+  return ["like", "comment", "repost", "send", "share"].some((label) => text.includes(label));
+}
+
+function findActionBar(container) {
+  const exactCandidates = collectMatches(container, SELECTORS.actionBars)
+    .filter((candidate) => isVisible(candidate));
+  const exactSocialCandidates = exactCandidates.filter((candidate) => looksLikeSocialActionBar(candidate));
+  if (exactSocialCandidates.length > 0) {
+    return exactSocialCandidates[exactSocialCandidates.length - 1];
+  }
+  if (exactCandidates.length > 0) {
+    return exactCandidates[exactCandidates.length - 1];
+  }
+
+  const fallbackCandidates = collectMatches(container, SELECTORS.fallbackActionBars)
+    .filter((candidate) => isVisible(candidate));
+  const fallbackSocialCandidates = fallbackCandidates.filter((candidate) =>
+    looksLikeSocialActionBar(candidate)
+  );
+  if (fallbackSocialCandidates.length > 0) {
+    return fallbackSocialCandidates[fallbackSocialCandidates.length - 1];
+  }
+  if (fallbackCandidates.length > 0) {
+    return fallbackCandidates[fallbackCandidates.length - 1];
+  }
+
+  return null;
+}
+
 function getLargestTextBlock(container) {
   const nodes = Array.from(container.querySelectorAll("span, p, div"));
   const sorted = nodes
@@ -77,12 +136,62 @@ function getLargestTextBlock(container) {
   return sorted[0] || "";
 }
 
+function normalizePostUrl(url) {
+  if (!url) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(url, window.location.origin);
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return url.trim();
+  }
+}
+
+function buildActivityUrl(activityUrn) {
+  if (!activityUrn) {
+    return "";
+  }
+
+  return normalizePostUrl(`${window.location.origin}/feed/update/${activityUrn}/`);
+}
+
+function findActivityUrn(container) {
+  const candidates = [
+    container,
+    container.closest("[data-urn*='activity']"),
+    container.querySelector("[data-urn*='activity']"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const urn = candidate.getAttribute?.("data-urn")?.trim();
+    if (urn?.includes("activity")) {
+      return urn;
+    }
+  }
+
+  return "";
+}
+
 function extractPostUrl(container) {
   if (window.location.pathname.startsWith("/posts/")) {
-    return window.location.href;
+    return normalizePostUrl(window.location.href);
   }
+
   const anchor = firstMatch(container, SELECTORS.canonicalLink);
-  return anchor?.href || window.location.href;
+  if (anchor?.href) {
+    return normalizePostUrl(anchor.href);
+  }
+
+  const activityUrn = findActivityUrn(container);
+  if (activityUrn) {
+    return buildActivityUrl(activityUrn);
+  }
+
+  return "";
 }
 
 function extractLinks(container) {
@@ -161,12 +270,21 @@ async function injectButton(container) {
     return;
   }
 
-  const actionBar = firstMatch(container, SELECTORS.actionBars);
+  const actionBar = findActionBar(container);
   if (!actionBar) {
     return;
   }
 
+  if (
+    actionBar.getAttribute(ACTION_BAR_FLAG) === "true" ||
+    actionBar.querySelector(`.${BUTTON_CLASS}`)
+  ) {
+    container.setAttribute(POST_FLAG, "true");
+    return;
+  }
+
   container.setAttribute(POST_FLAG, "true");
+  actionBar.setAttribute(ACTION_BAR_FLAG, "true");
   const button = document.createElement("button");
   button.type = "button";
   button.className = BUTTON_CLASS;
@@ -183,6 +301,8 @@ async function injectButton(container) {
   });
   setButtonState(button, "ready");
 
+  actionBar.appendChild(button);
+
   const savedPostUrls = await getSavedPostUrls();
   const postUrl = extractPostUrl(container);
   if (savedPostUrls.includes(postUrl)) {
@@ -194,8 +314,6 @@ async function injectButton(container) {
     event.stopPropagation();
     void handleSaveClick(container, button);
   });
-
-  actionBar.appendChild(button);
 }
 
 function scanAndInject() {
@@ -214,4 +332,3 @@ observer.observe(document.body, {
   childList: true,
   subtree: true,
 });
-
