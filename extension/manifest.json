@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "PM Job Saver",
+  "version": "0.0.1",
+  "description": "Save LinkedIn PM job posts and analyze fit against your resume.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://*.linkedin.com/*", "http://localhost:8000/*", "http://localhost:5173/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "PM Job Saver",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.linkedin.com/*"],
+      "js": ["content_script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
+

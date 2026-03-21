@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PM Job Saver</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <div class="header">
+        <div>
+          <h1>PM Job Saver</h1>
+          <p>Save LinkedIn openings without breaking your flow.</p>
+        </div>
+        <div id="status-dot" class="status-dot offline"></div>
+      </div>
+
+      <div class="stats">
+        <span>Saved posts</span>
+        <strong id="saved-count">0</strong>
+      </div>
+
+      <label for="backend-url">Backend URL</label>
+      <input id="backend-url" type="text" placeholder="http://localhost:8000" />
+
+      <div class="actions">
+        <button id="save-settings">Save backend URL</button>
+        <button id="open-dashboard" class="secondary">Open Dashboard</button>
+      </div>
+
+      <p id="status-text" class="status-text">Checking connection…</p>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
+
