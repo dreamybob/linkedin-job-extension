@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS posts (
   links_in_post TEXT,
   saved_at TEXT,
   status TEXT DEFAULT 'pending',
+  error_message TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -42,4 +43,3 @@ CREATE TABLE IF NOT EXISTS resume (
   raw_text TEXT,
   uploaded_at TEXT DEFAULT (datetime('now'))
 );
-

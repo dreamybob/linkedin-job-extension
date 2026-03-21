@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PostIngest(BaseModel):
@@ -32,6 +32,17 @@ class RequirementsExtraction(BaseModel):
     culture_signals: list[str] = Field(default_factory=list)
     red_flags: list[str] = Field(default_factory=list)
 
+    @field_validator(
+        "must_have_skills",
+        "nice_to_have_skills",
+        "culture_signals",
+        "red_flags",
+        mode="before",
+    )
+    @classmethod
+    def default_list_fields(cls, value):
+        return value or []
+
 
 class FitmentAnalysis(BaseModel):
     fitment_score: int | None = None
@@ -41,6 +52,17 @@ class FitmentAnalysis(BaseModel):
     angles_to_emphasize: list[str] = Field(default_factory=list)
     outreach_talking_points: list[str] = Field(default_factory=list)
 
+    @field_validator(
+        "strong_matches",
+        "gaps",
+        "angles_to_emphasize",
+        "outreach_talking_points",
+        mode="before",
+    )
+    @classmethod
+    def default_analysis_lists(cls, value):
+        return value or []
+
 
 class PostSummary(BaseModel):
     id: int
@@ -49,6 +71,7 @@ class PostSummary(BaseModel):
     poster_headline: str = ""
     saved_at: str | None = None
     status: Literal["pending", "processing", "done", "error"]
+    error_message: str | None = None
     job_title: str | None = None
     company_name: str | None = None
     remote_status: str | None = None
@@ -74,4 +97,3 @@ class PostDetail(PostSummary):
     angles_to_emphasize: list[str] = Field(default_factory=list)
     outreach_talking_points: list[str] = Field(default_factory=list)
     linked_content: str = ""
-

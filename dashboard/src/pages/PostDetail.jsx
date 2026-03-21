@@ -7,6 +7,7 @@ import StatusBadge from "../components/StatusBadge";
 import RequirementsList from "../components/RequirementsList";
 import GapsList from "../components/GapsList";
 import { usePollingInterval } from "../hooks/usePollingInterval";
+import { getPostEyebrow, getPostTitle } from "../utils/postPresentation";
 
 export default function PostDetail() {
   const { id } = useParams();
@@ -36,6 +37,12 @@ export default function PostDetail() {
     return <div className="rounded-3xl border border-danger/30 bg-danger/10 p-8 text-danger">Failed to load the post.</div>;
   }
 
+  const fitmentSummary =
+    data.fitment_summary ||
+    (data.status === "error"
+      ? data.error_message || "Analysis failed before the role could be extracted."
+      : "Analysis is still in progress.");
+
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between">
@@ -54,12 +61,15 @@ export default function PostDetail() {
       <div className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-panel">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-mist/55">{data.company_name || "Awaiting analysis"}</p>
-            <h1 className="mt-2 font-display text-4xl text-white">{data.job_title || "LinkedIn post captured"}</h1>
+            <p className="text-sm uppercase tracking-[0.25em] text-mist/55">{getPostEyebrow(data)}</p>
+            <h1 className="mt-2 font-display text-4xl text-white">{getPostTitle(data)}</h1>
             <p className="mt-3 text-sm text-mist/70">
               {data.poster_name || "Unknown poster"}
               {data.poster_headline ? ` · ${data.poster_headline}` : ""}
             </p>
+            {data.error_message && (
+              <p className="mt-3 max-w-2xl text-sm text-danger/90">{data.error_message}</p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <FitmentBadge score={data.fitment_score} />
@@ -79,7 +89,7 @@ export default function PostDetail() {
 
       <section className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-panel">
         <h2 className="font-display text-2xl text-white">Fitment summary</h2>
-        <p className="mt-3 text-base leading-7 text-mist/85">{data.fitment_summary || "Analysis is still in progress."}</p>
+        <p className="mt-3 text-base leading-7 text-mist/85">{fitmentSummary}</p>
       </section>
 
       <RequirementsList
@@ -139,4 +149,3 @@ function ExternalLink({ href, children }) {
     </a>
   );
 }
-

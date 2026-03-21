@@ -4,6 +4,7 @@ import json
 from typing import TypeVar
 
 from google import genai
+from google.genai import types
 from pydantic import BaseModel, ValidationError
 
 from config import settings
@@ -20,6 +21,25 @@ SYSTEM_PROMPT = (
 )
 
 
+def _extract_json_payload(text: str) -> str:
+    cleaned = text.strip()
+
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end >= start:
+        return cleaned[start : end + 1]
+
+    return cleaned
+
+
 class AIAnalyzer:
     def __init__(self) -> None:
         self.model = settings.gemini_model
@@ -31,9 +51,18 @@ class AIAnalyzer:
 
         response = self.client.models.generate_content(
             model=self.model,
-            contents=f"{SYSTEM_PROMPT}\n\n{prompt}",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=schema,
+            ),
         )
-        content = (response.text or "").strip() or "{}"
+        parsed = getattr(response, "parsed", None)
+        if isinstance(parsed, schema):
+            return parsed
+
+        content = _extract_json_payload((response.text or "").strip() or "{}")
         try:
             payload = json.loads(content)
         except json.JSONDecodeError as exc:

@@ -131,6 +131,7 @@ def test_background_worker_marks_post_error_on_failure(monkeypatch, tmp_path):
     worker.process_post(1)
 
     with database.get_db() as db:
-        post = db.execute("SELECT status FROM posts WHERE id = 1").fetchone()
+        post = db.execute("SELECT status, error_message FROM posts WHERE id = 1").fetchone()
 
     assert post["status"] == "error"
+    assert post["error_message"] == "RuntimeError: boom"

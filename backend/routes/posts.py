@@ -128,7 +128,7 @@ def list_posts(
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     query = f"""
       SELECT
-        p.id, p.post_url, p.poster_name, p.poster_headline, p.saved_at, p.status,
+        p.id, p.post_url, p.poster_name, p.poster_headline, p.saved_at, p.status, p.error_message,
         a.job_title, a.company_name, a.remote_status, a.seniority, a.fitment_score
       FROM posts p
       LEFT JOIN analysis a ON a.post_id = p.id
@@ -151,7 +151,7 @@ def get_post(post_id: int) -> PostDetail:
             """
             SELECT
               p.id, p.post_url, p.post_text, p.poster_name, p.poster_profile_url,
-              p.poster_headline, p.links_in_post, p.saved_at, p.status,
+              p.poster_headline, p.links_in_post, p.saved_at, p.status, p.error_message,
               a.job_title, a.company_name, a.location, a.remote_status, a.seniority,
               a.domain, a.compensation, a.must_have_skills, a.nice_to_have_skills,
               a.experience_years, a.culture_signals, a.red_flags, a.fitment_score,
@@ -171,7 +171,10 @@ def get_post(post_id: int) -> PostDetail:
 @router.get("/status/{post_id}")
 def get_post_status(post_id: int) -> dict[str, Any]:
     with get_db() as db:
-        row = db.execute("SELECT id, status FROM posts WHERE id = ?", (post_id,)).fetchone()
+        row = db.execute(
+            "SELECT id, status, error_message FROM posts WHERE id = ?",
+            (post_id,),
+        ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Post not found")
     return row

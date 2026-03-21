@@ -25,7 +25,10 @@ class BackgroundWorker:
             ).fetchone()
             if not post:
                 return
-            db.execute("UPDATE posts SET status = 'processing' WHERE id = ?", (post_id,))
+            db.execute(
+                "UPDATE posts SET status = 'processing', error_message = NULL WHERE id = ?",
+                (post_id,),
+            )
 
         try:
             links_in_post = json.loads(post["links_in_post"] or "[]")
@@ -103,7 +106,10 @@ class BackgroundWorker:
                     ),
                 )
                 db.execute("UPDATE posts SET status = 'done' WHERE id = ?", (post_id,))
-        except Exception:
+                db.execute("UPDATE posts SET error_message = NULL WHERE id = ?", (post_id,))
+        except Exception as exc:
             with get_db() as db:
-                db.execute("UPDATE posts SET status = 'error' WHERE id = ?", (post_id,))
-
+                db.execute(
+                    "UPDATE posts SET status = 'error', error_message = ? WHERE id = ?",
+                    (f"{type(exc).__name__}: {exc}", post_id),
+                )

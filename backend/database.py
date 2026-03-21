@@ -15,12 +15,22 @@ def dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
     return {column[0]: row[idx] for idx, column in enumerate(cursor.description)}
 
 
+def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {
+        row[1]
+        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in columns:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db() -> None:
     db_path = Path(settings.database_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as connection:
         connection.execute("PRAGMA foreign_keys = ON;")
         connection.executescript(SCHEMA_PATH.read_text())
+        _ensure_column(connection, "posts", "error_message", "TEXT")
         connection.commit()
 
 
@@ -34,4 +44,3 @@ def get_db() -> Iterator[sqlite3.Connection]:
         connection.commit()
     finally:
         connection.close()
-

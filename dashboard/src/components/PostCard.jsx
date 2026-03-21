@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import FitmentBadge from "./FitmentBadge";
 import StatusBadge from "./StatusBadge";
+import { getPostEyebrow, getPostTitle } from "../utils/postPresentation";
 
 export default function PostCard({ post }) {
   return (
@@ -10,12 +11,17 @@ export default function PostCard({ post }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-mist/55">{post.company_name || "Awaiting analysis"}</p>
-          <h2 className="mt-2 font-display text-2xl text-white">{post.job_title || "LinkedIn post captured"}</h2>
+          <p className="text-sm uppercase tracking-[0.2em] text-mist/55">{getPostEyebrow(post)}</p>
+          <h2 className="mt-2 font-display text-2xl text-white">{getPostTitle(post)}</h2>
           <p className="mt-2 text-sm text-mist/70">
             {post.poster_name || "Unknown poster"}
             {post.poster_headline ? ` · ${post.poster_headline}` : ""}
           </p>
+          {post.error_message && (
+            <p className="mt-3 text-sm text-danger/90" title={post.error_message}>
+              {post.error_message}
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
           <FitmentBadge score={post.fitment_score} />
@@ -30,4 +36,3 @@ export default function PostCard({ post }) {
     </Link>
   );
 }
-
