@@ -7,7 +7,7 @@ export default function PostCard({ post }) {
   return (
     <Link
       to={`/posts/${post.id}`}
-      className="group rounded-[28px] border border-white/10 bg-white/5 px-5 py-4 shadow-panel transition hover:border-electric/30 hover:bg-white/10"
+      className="group block rounded-[28px] border border-white/10 bg-white/5 px-5 py-4 shadow-panel transition hover:border-electric/30 hover:bg-white/10"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
