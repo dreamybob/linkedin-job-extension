@@ -43,11 +43,26 @@ def _extract_json_payload(text: str) -> str:
 class AIAnalyzer:
     def __init__(self) -> None:
         self.model = settings.gemini_model
-        self.client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+        client_kwargs = {}
+
+        if settings.use_vertex_ai:
+            client_kwargs["vertexai"] = True
+            if settings.vertex_ai_api_key:
+                client_kwargs["api_key"] = settings.vertex_ai_api_key
+            elif settings.google_cloud_project:
+                client_kwargs["project"] = settings.google_cloud_project
+            if not settings.vertex_ai_api_key and settings.google_cloud_location:
+                client_kwargs["location"] = settings.google_cloud_location
+        elif settings.gemini_api_key:
+            client_kwargs["api_key"] = settings.gemini_api_key
+
+        self.client = genai.Client(**client_kwargs) if client_kwargs else None
 
     def _complete_json(self, prompt: str, schema: type[ModelT]) -> ModelT:
         if not self.client:
-            raise RuntimeError("GEMINI_API_KEY is not configured.")
+            raise RuntimeError(
+                "No Gemini credentials are configured. Set VERTEX_AI_API_KEY or GEMINI_API_KEY."
+            )
 
         response = self.client.models.generate_content(
             model=self.model,

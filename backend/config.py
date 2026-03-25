@@ -26,6 +26,13 @@ _load_dotenv()
 class Settings:
     def __init__(self) -> None:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
+        self.vertex_ai_api_key = os.getenv("VERTEX_AI_API_KEY", "")
+        self.use_vertex_ai = (
+            os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
+            or bool(self.vertex_ai_api_key)
+        )
+        self.google_cloud_project = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+        self.google_cloud_location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.database_path = os.getenv(
             "DATABASE_PATH", str((BASE_DIR / "db" / "pm_job_saver.db").resolve())

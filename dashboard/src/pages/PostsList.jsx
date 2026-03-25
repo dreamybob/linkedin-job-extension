@@ -85,7 +85,7 @@ export default function PostsList() {
       {isLoading && <div className="rounded-3xl border border-white/10 bg-white/5 p-8 text-mist/70">Loading posts…</div>}
       {error && <div className="rounded-3xl border border-danger/30 bg-danger/10 p-8 text-danger">Failed to load posts.</div>}
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="space-y-4">
         {data?.items?.map((post) => (
           <PostCard key={post.id} post={post} />
         ))}
@@ -99,4 +99,3 @@ export default function PostsList() {
     </section>
   );
 }
-

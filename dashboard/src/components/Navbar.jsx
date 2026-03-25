@@ -21,11 +21,10 @@ export default function Navbar() {
             Posts
           </NavLink>
           <NavLink to="/resume" className={linkClasses}>
-            Resume
+            Your resumes
           </NavLink>
         </nav>
       </div>
     </header>
   );
 }
-
