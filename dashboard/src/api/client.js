@@ -24,6 +24,11 @@ export async function deletePost(id) {
   return data;
 }
 
+export async function updatePostLabels(id, payload) {
+  const { data } = await api.patch(`/api/posts/${id}/labels`, payload);
+  return data;
+}
+
 export async function fetchResume() {
   const { data } = await api.get("/api/resume");
   return data;
@@ -43,4 +48,3 @@ export async function deleteResume() {
   const { data } = await api.delete("/api/resume");
   return data;
 }
-

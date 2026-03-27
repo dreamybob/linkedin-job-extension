@@ -49,6 +49,7 @@ def test_background_worker_marks_post_done_without_resume(monkeypatch, tmp_path)
             {
                 "job_title": "Senior PM",
                 "company_name": "Acme",
+                "company_linkedin_url": "https://linkedin.com/company/acme",
                 "location": "Remote",
                 "remote_status": "remote",
                 "seniority": "senior",
@@ -67,6 +68,10 @@ def test_background_worker_marks_post_done_without_resume(monkeypatch, tmp_path)
                 "must_have_skills": ["Roadmapping"],
                 "nice_to_have_skills": ["Payments"],
                 "experience_years": "5+ years",
+                "required_pm_experience": "5+ years in product management",
+                "immediate_joiner_preferred": True,
+                "application_method": "Apply Link",
+                "apply_url": "https://example.com/apply",
                 "culture_signals": ["high autonomy"],
                 "red_flags": ["relocation"],
             },

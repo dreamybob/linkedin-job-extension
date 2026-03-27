@@ -2,22 +2,13 @@ export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
-      colors: {
-        ink: "#08111f",
-        mist: "#dce7f8",
-        electric: "#75e4b3",
-        amberline: "#f4b860",
-        danger: "#f06d6d",
-      },
       boxShadow: {
-        panel: "0 24px 70px rgba(2, 8, 23, 0.35)",
+        panel: "0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.05)",
       },
       fontFamily: {
-        display: ["Georgia", "serif"],
-        body: ["'Trebuchet MS'", "Verdana", "sans-serif"],
+        sans: ["'Plus Jakarta Sans'", "ui-sans-serif", "system-ui", "sans-serif"],
       },
     },
   },
   plugins: [],
 };
-

@@ -73,9 +73,10 @@ def test_posts_filtering_and_search(client, monkeypatch):
     response = client.get("/api/posts", params={"search": "acme", "score_band": "high"})
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == 2
+    assert body["total"] == 1
     assert len(body["items"]) == 1
     assert body["items"][0]["company_name"] == "Acme"
+    assert body["items"][0]["saved_at"] == "2026-03-20T12:00:00+00:00"
 
 
 def test_get_post_detail_returns_joined_payload(client):
@@ -103,11 +104,13 @@ def test_get_post_detail_returns_joined_payload(client):
             """
             INSERT INTO analysis (
               post_id, job_title, company_name, location, remote_status, seniority, domain,
-              compensation, must_have_skills, nice_to_have_skills, experience_years,
+              compensation, company_linkedin_url, must_have_skills, nice_to_have_skills, experience_years,
+              required_pm_experience, immediate_joiner_preferred, application_method, apply_url,
               culture_signals, red_flags, fitment_score, fitment_summary, strong_matches,
-              gaps, angles_to_emphasize, outreach_talking_points, linked_content
+              gaps, mandatory_qualification_missing, mandatory_qualification_reasons,
+              mandatory_qualification_details, angles_to_emphasize, outreach_talking_points, linked_content
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 1,
@@ -118,15 +121,23 @@ def test_get_post_detail_returns_joined_payload(client):
                 "senior",
                 "B2B",
                 None,
+                "https://linkedin.com/company/acme",
                 '["SQL"]',
                 '["ML"]',
                 "5+ years",
+                "4+ years in product management",
+                1,
+                "Apply Link",
+                "https://example.com/apply",
                 '["high autonomy"]',
                 '["relocation"]',
                 7,
                 "Decent fit",
                 '["Roadmapping"]',
                 '["Payments"]',
+                1,
+                '["MBA required"]',
+                '["The post explicitly requires an MBA and the resume does not show one."]',
                 '["Translate analytics"]',
                 '["Reference hiring manager context"]',
                 "Fetched text",
@@ -139,6 +150,39 @@ def test_get_post_detail_returns_joined_payload(client):
     assert body["company_name"] == "Acme"
     assert body["must_have_skills"] == ["SQL"]
     assert body["linked_content"] == "Fetched text"
+    assert body["company_linkedin_url"] == "https://linkedin.com/company/acme"
+    assert body["mandatory_qualification_missing"] is True
+    assert body["mandatory_qualification_reasons"] == ["MBA required"]
+
+
+def test_update_post_labels_is_mutually_exclusive(client):
+    from database import get_db
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO posts (id, post_url, post_text, poster_name, poster_headline, links_in_post, saved_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                "https://linkedin.com/posts/1",
+                "Role text",
+                "Alice",
+                "Product Leader",
+                "[]",
+                "2026-03-20T12:00:00+00:00",
+                "done",
+            ),
+        )
+
+    first = client.patch("/api/posts/1/labels", json={"is_important": True})
+    second = client.patch("/api/posts/1/labels", json={"is_irrelevant": True})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["is_irrelevant"] is True
+    assert second.json()["is_important"] is False
 
 
 def test_resume_upload_rejects_non_pdf(client):

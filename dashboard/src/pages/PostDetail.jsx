@@ -1,12 +1,28 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deletePost, fetchPost } from "../api/client";
+import {
+  ArrowLeft,
+  Building2,
+  ExternalLink,
+  FileText,
+  Globe,
+  Link2,
+  MapPin,
+  MessageSquare,
+  Send,
+  Trash2,
+  UserRound,
+} from "lucide-react";
+import { deletePost, fetchPost, updatePostLabels } from "../api/client";
+import Avatar from "../components/Avatar";
 import FitmentBadge from "../components/FitmentBadge";
-import StatusBadge from "../components/StatusBadge";
-import RequirementsList from "../components/RequirementsList";
 import GapsList from "../components/GapsList";
+import PostTags from "../components/PostTags";
+import RequirementsList from "../components/RequirementsList";
+import StatusBadge from "../components/StatusBadge";
 import { usePollingInterval } from "../hooks/usePollingInterval";
+import { formatSavedDateTime } from "../utils/formatting";
 import { getPostEyebrow, getPostTitle } from "../utils/postPresentation";
 
 export default function PostDetail() {
@@ -29,12 +45,20 @@ export default function PostDetail() {
     },
   });
 
+  const labelMutation = useMutation({
+    mutationFn: (payload) => updatePostLabels(id, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["post", id] });
+      await queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
   if (isLoading) {
-    return <div className="rounded-3xl border border-white/10 bg-white/5 p-8 text-mist/70">Loading analysis…</div>;
+    return <StateCard tone="info" title="Loading analysis" description="Gathering role details and fit signals." />;
   }
 
   if (error || !data) {
-    return <div className="rounded-3xl border border-danger/30 bg-danger/10 p-8 text-danger">Failed to load the post.</div>;
+    return <StateCard tone="error" title="Failed to load post" description="The detail view could not be loaded." />;
   }
 
   const fitmentSummary =
@@ -44,52 +68,138 @@ export default function PostDetail() {
       : "Analysis is still in progress.");
 
   return (
-    <section className="space-y-5">
-      <div className="flex items-center justify-between">
-        <Link to="/" className="text-sm text-mist/70 transition hover:text-white">
-          ← Back to posts
+    <section className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-blue-700">
+          <ArrowLeft className="h-4 w-4" />
+          Back to posts
         </Link>
-        <button
-          type="button"
-          onClick={() => deleteMutation.mutate()}
-          className="rounded-full border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger"
-        >
-          Delete post
-        </button>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => labelMutation.mutate({ is_important: !data.is_important })}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              data.is_important ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {data.is_important ? "Marked Important" : "Mark Important"}
+          </button>
+          <button
+            type="button"
+            onClick={() => labelMutation.mutate({ is_irrelevant: !data.is_irrelevant })}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              data.is_irrelevant ? "bg-gray-700 text-white hover:bg-gray-800" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {data.is_irrelevant ? "Marked Irrelevant" : "Mark Irrelevant"}
+          </button>
+          <button
+            type="button"
+            onClick={() => deleteMutation.mutate()}
+            className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete post
+          </button>
+        </div>
       </div>
 
-      <div className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-panel">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-mist/55">{getPostEyebrow(data)}</p>
-            <h1 className="mt-2 font-display text-4xl text-white">{getPostTitle(data)}</h1>
-            <p className="mt-3 text-sm text-mist/70">
-              {data.poster_name || "Unknown poster"}
-              {data.poster_headline ? ` · ${data.poster_headline}` : ""}
-            </p>
-            {data.error_message && (
-              <p className="mt-3 max-w-2xl text-sm text-danger/90">{data.error_message}</p>
-            )}
+      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-panel">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-gray-500">{getPostEyebrow(data)}</p>
+            <h1 className="mt-2 text-3xl font-bold text-gray-900">{getPostTitle(data)}</h1>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Avatar name={data.poster_name} size="md" />
+              <div className="min-w-0">
+                {data.poster_profile_url ? (
+                  <a
+                    href={data.poster_profile_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:underline"
+                  >
+                    {data.poster_name || "Unknown poster"}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <p className="text-sm font-semibold text-gray-900">{data.poster_name || "Unknown poster"}</p>
+                )}
+                <p className="text-sm text-gray-500">{data.poster_headline || "Poster headline not available"}</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <PostTags post={data} />
+            </div>
+            {data.error_message && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{data.error_message}</p>}
           </div>
-          <div className="flex flex-col items-end gap-2">
+
+          <div className="flex flex-wrap gap-2">
             <FitmentBadge score={data.fitment_score} />
             <StatusBadge status={data.status} />
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <InfoCard title="Location" value={data.location || "Unknown"} />
-          <InfoCard title="Work mode" value={data.remote_status || "unknown"} />
-          <InfoCard title="Seniority" value={data.seniority || "Unknown"} />
-          <InfoCard title="Domain" value={data.domain || "Unknown"} />
-          <InfoCard title="Compensation" value={data.compensation || "Not listed"} />
-          <InfoCard title="Post URL" value={<ExternalLink href={data.post_url}>Open LinkedIn post</ExternalLink>} />
+        <div className="mt-6 grid gap-4 lg:grid-cols-4">
+          <InfoCard icon={Building2} title="Company" value={data.company_name || "Unknown"} />
+          <InfoCard icon={MapPin} title="Location" value={data.location || "Unknown"} />
+          <InfoCard icon={Globe} title="Work mode" value={data.remote_status || "Unknown"} />
+          <InfoCard icon={UserRound} title="Saved on" value={formatSavedDateTime(data.saved_at)} />
+          <InfoCard icon={Link2} title="Company profile" value={<ExternalValue href={data.company_linkedin_url}>Open company on LinkedIn</ExternalValue>} />
+          <InfoCard icon={Send} title="Apply method" value={data.application_method || "Unknown"} />
+          <InfoCard icon={MessageSquare} title="Required PM experience" value={data.required_pm_experience || data.experience_years || "Not specified"} />
+          <InfoCard icon={ExternalLink} title="Post URL" value={<ExternalValue href={data.post_url}>Open LinkedIn post</ExternalValue>} />
         </div>
       </div>
 
-      <section className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-panel">
-        <h2 className="font-display text-2xl text-white">Fitment summary</h2>
-        <p className="mt-3 text-base leading-7 text-mist/85">{fitmentSummary}</p>
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-gray-900">Fitment summary</h2>
+        <p className="mt-3 text-sm leading-7 text-gray-700">{fitmentSummary}</p>
+      </section>
+
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-gray-900">Application guidance</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <DetailLine label="Application method" value={data.application_method || "Unknown"} />
+          <DetailLine label="Apply link" value={<ExternalValue href={data.apply_url}>Open application link</ExternalValue>} />
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-gray-900">Qualification checks</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className={`rounded-lg border p-4 ${data.immediate_joiner_preferred ? "border-purple-200 bg-purple-50" : "border-gray-200 bg-gray-50"}`}>
+            <p className="text-sm font-medium text-gray-500">Immediate Joiner Preferred</p>
+            <p className={`mt-2 text-sm font-semibold ${data.immediate_joiner_preferred ? "text-purple-700" : "text-gray-700"}`}>
+              {data.immediate_joiner_preferred ? "Yes, called out in the post." : "Not clearly required."}
+            </p>
+          </div>
+          <div className={`rounded-lg border p-4 ${data.mandatory_qualification_missing ? "border-amber-200 bg-amber-50" : "border-gray-200 bg-gray-50"}`}>
+            <p className="text-sm font-medium text-gray-500">Mandatory Qualification Missing</p>
+            <p className={`mt-2 text-sm font-semibold ${data.mandatory_qualification_missing ? "text-amber-700" : "text-gray-700"}`}>
+              {data.mandatory_qualification_missing ? "Potential blocker detected." : "No clear mandatory blocker detected."}
+            </p>
+          </div>
+        </div>
+
+        {data.mandatory_qualification_reasons?.length > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-medium text-amber-700">What appears to be missing</p>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-700">
+              {data.mandatory_qualification_reasons.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            {data.mandatory_qualification_details?.length > 0 && (
+              <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-amber-700">
+                {data.mandatory_qualification_details.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </section>
 
       <RequirementsList
@@ -107,45 +217,76 @@ export default function PostDetail() {
         outreachTalkingPoints={data.outreach_talking_points}
       />
 
-      <section className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-panel">
-        <h2 className="font-display text-2xl text-white">Linked content</h2>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-mist/80">
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-gray-900">Linked content</h2>
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-700">
           {data.linked_content || "No external links were fetched for this post."}
         </p>
       </section>
 
-      <section className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-panel">
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-2xl text-white">Original post text</h2>
+          <h2 className="text-xl font-bold text-gray-900">Original post text</h2>
           <button
             type="button"
             onClick={() => setExpanded((current) => !current)}
-            className="rounded-full border border-white/15 px-4 py-2 text-sm text-mist"
+            className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200"
           >
             {expanded ? "Collapse" : "Expand"}
           </button>
         </div>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-mist/80">
-          {expanded ? data.post_text : `${data.post_text.slice(0, 400)}${data.post_text.length > 400 ? "…" : ""}`}
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+          {expanded ? data.post_text : `${data.post_text.slice(0, 700)}${data.post_text.length > 700 ? "…" : ""}`}
         </p>
       </section>
     </section>
   );
 }
 
-function InfoCard({ title, value }) {
+function InfoCard({ icon: Icon, title, value }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-ink/45 p-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-mist/55">{title}</p>
-      <div className="mt-2 text-sm text-mist">{value}</div>
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+        <Icon className="h-4 w-4 text-gray-400" />
+        <span>{title}</span>
+      </div>
+      <div className="mt-2 text-sm text-gray-700">{value}</div>
     </div>
   );
 }
 
-function ExternalLink({ href, children }) {
+function DetailLine({ label, value }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="text-electric hover:text-white">
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <p className="text-sm font-medium text-gray-500">{label}</p>
+      <div className="mt-2 text-sm text-gray-700">{value}</div>
+    </div>
+  );
+}
+
+function ExternalValue({ href, children }) {
+  if (!href) {
+    return <span className="text-gray-400">Not available</span>;
+  }
+
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 hover:underline">
       {children}
+      <ExternalLink className="h-3 w-3" />
     </a>
+  );
+}
+
+function StateCard({ tone, title, description }) {
+  const styles = {
+    info: "border-blue-200 bg-blue-50 text-blue-700",
+    error: "border-red-200 bg-red-50 text-red-700",
+  };
+
+  return (
+    <div className={`rounded-lg border p-6 ${styles[tone]}`}>
+      <p className="text-lg font-semibold">{title}</p>
+      <p className="mt-2 text-sm">{description}</p>
+    </div>
   );
 }

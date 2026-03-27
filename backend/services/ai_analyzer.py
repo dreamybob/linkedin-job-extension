@@ -92,8 +92,8 @@ class AIAnalyzer:
             "Extract the role details from the following LinkedIn job post.\n\n"
             f"POST TEXT:\n{post_text}\n\n"
             f"LINKED CONTENT:\n{linked_content or 'None'}\n\n"
-            "Return JSON with keys: job_title, company_name, location, remote_status, "
-            "seniority, domain, compensation."
+            "Return JSON with keys: job_title, company_name, company_linkedin_url, "
+            "location, remote_status, seniority, domain, compensation."
         )
         return self._complete_json(prompt, RoleExtraction)
 
@@ -103,7 +103,9 @@ class AIAnalyzer:
             f"POST TEXT:\n{post_text}\n\n"
             f"LINKED CONTENT:\n{linked_content or 'None'}\n\n"
             "Return JSON with keys: must_have_skills, nice_to_have_skills, "
-            "experience_years, culture_signals, red_flags."
+            "experience_years, required_pm_experience, immediate_joiner_preferred, "
+            "application_method, apply_url, culture_signals, red_flags. "
+            "For application_method, choose one of: Google Form, Apply Link, DM, Comment, E-Mail, Unknown."
         )
         return self._complete_json(prompt, RequirementsExtraction)
 
@@ -119,6 +121,10 @@ class AIAnalyzer:
             f"ROLE:\n{role.model_dump_json(indent=2)}\n\n"
             f"REQUIREMENTS:\n{requirements.model_dump_json(indent=2)}\n\n"
             "Return JSON with keys: fitment_score, fitment_summary, strong_matches, "
-            "gaps, angles_to_emphasize, outreach_talking_points."
+            "gaps, mandatory_qualification_missing, mandatory_qualification_reasons, "
+            "mandatory_qualification_details, angles_to_emphasize, outreach_talking_points. "
+            "Only mark mandatory_qualification_missing true when the post clearly requires something "
+            "the resume does not show, such as mandatory industry experience, minimum years, MBA, "
+            "or location eligibility."
         )
         return self._complete_json(prompt, FitmentAnalysis)

@@ -3,12 +3,19 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+html {
+  background: #f9fafb;
 }
 
 body {
   margin: 0;
-  font-family: "Trebuchet MS", Verdana, sans-serif;
+  min-width: 320px;
+  background: #f9fafb;
+  color: #374151;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
 a {
@@ -23,3 +30,10 @@ textarea {
   font: inherit;
 }
 
+button {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.14);
+}

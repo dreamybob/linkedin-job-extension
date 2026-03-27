@@ -31,6 +31,16 @@ def init_db() -> None:
         connection.execute("PRAGMA foreign_keys = ON;")
         connection.executescript(SCHEMA_PATH.read_text())
         _ensure_column(connection, "posts", "error_message", "TEXT")
+        _ensure_column(connection, "posts", "is_important", "INTEGER DEFAULT 0")
+        _ensure_column(connection, "posts", "is_irrelevant", "INTEGER DEFAULT 0")
+        _ensure_column(connection, "analysis", "company_linkedin_url", "TEXT")
+        _ensure_column(connection, "analysis", "required_pm_experience", "TEXT")
+        _ensure_column(connection, "analysis", "immediate_joiner_preferred", "INTEGER DEFAULT 0")
+        _ensure_column(connection, "analysis", "application_method", "TEXT")
+        _ensure_column(connection, "analysis", "apply_url", "TEXT")
+        _ensure_column(connection, "analysis", "mandatory_qualification_missing", "INTEGER DEFAULT 0")
+        _ensure_column(connection, "analysis", "mandatory_qualification_reasons", "TEXT")
+        _ensure_column(connection, "analysis", "mandatory_qualification_details", "TEXT")
         connection.commit()
 
 

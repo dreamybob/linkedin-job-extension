@@ -1,27 +1,26 @@
 const STYLE_MAP = {
-  high: "border-electric/40 bg-electric/15 text-electric",
-  mid: "border-amberline/40 bg-amberline/15 text-amberline",
-  low: "border-danger/40 bg-danger/15 text-danger",
-  none: "border-white/15 bg-white/5 text-mist/70",
+  high: "border-green-200 bg-green-50 text-green-700",
+  mid: "border-yellow-200 bg-yellow-50 text-yellow-700",
+  low: "border-red-200 bg-red-50 text-red-700",
+  none: "border-gray-200 bg-gray-50 text-gray-500",
 };
 
 export default function FitmentBadge({ score }) {
-  let label = "Analysing...";
+  let label = "Fit pending";
   let style = STYLE_MAP.none;
 
   if (typeof score === "number") {
     if (score >= 8) {
-      label = `Strong Fit · ${score}/10`;
+      label = `High Fit • ${score}/10`;
       style = STYLE_MAP.high;
     } else if (score >= 5) {
-      label = `Partial Fit · ${score}/10`;
+      label = `Medium Fit • ${score}/10`;
       style = STYLE_MAP.mid;
     } else {
-      label = `Weak Fit · ${score}/10`;
+      label = `Low Fit • ${score}/10`;
       style = STYLE_MAP.low;
     }
   }
 
-  return <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${style}`}>{label}</span>;
+  return <span className={`rounded-md border px-2.5 py-0.5 text-xs font-medium ${style}`}>{label}</span>;
 }
-

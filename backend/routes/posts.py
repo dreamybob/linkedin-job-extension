@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from database import get_db
-from models.post import PostDetail, PostIngest
+from models.post import PostDetail, PostIngest, PostLabelsUpdate
 from services.background_worker import BackgroundWorker
 
 
@@ -34,6 +34,8 @@ def _serialize_post_detail(row: dict[str, Any]) -> PostDetail:
         "red_flags",
         "strong_matches",
         "gaps",
+        "mandatory_qualification_reasons",
+        "mandatory_qualification_details",
         "angles_to_emphasize",
         "outreach_talking_points",
     ):
@@ -84,6 +86,7 @@ def save_post(post: PostIngest, background_tasks: BackgroundTasks) -> dict[str, 
 def list_posts(
     status: str | None = None,
     score_band: str | None = Query(default=None, pattern="^(high|mid|low|pending|error)$"),
+    tag: str | None = Query(default=None, pattern="^(important|irrelevant|immediate_joiner|mandatory_missing)$"),
     search: str | None = None,
     sort: str = Query(default="newest", pattern="^(newest|score_desc|company_asc)$"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -107,6 +110,15 @@ def list_posts(
     elif score_band == "error":
         where.append("p.status = 'error'")
 
+    if tag == "important":
+        where.append("p.is_important = 1")
+    elif tag == "irrelevant":
+        where.append("p.is_irrelevant = 1")
+    elif tag == "immediate_joiner":
+        where.append("COALESCE(a.immediate_joiner_preferred, 0) = 1")
+    elif tag == "mandatory_missing":
+        where.append("COALESCE(a.mandatory_qualification_missing, 0) = 1")
+
     if search:
         where.append(
             "(LOWER(COALESCE(a.company_name, '')) LIKE ? OR "
@@ -128,8 +140,10 @@ def list_posts(
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     query = f"""
       SELECT
-        p.id, p.post_url, p.poster_name, p.poster_headline, p.saved_at, p.status, p.error_message,
-        a.job_title, a.company_name, a.remote_status, a.seniority, a.fitment_score
+        p.id, p.post_url, p.poster_name, p.poster_headline, p.saved_at, p.is_important, p.is_irrelevant,
+        p.status, p.error_message, a.job_title, a.company_name, a.remote_status, a.seniority,
+        a.fitment_score, COALESCE(a.immediate_joiner_preferred, 0) AS immediate_joiner_preferred,
+        COALESCE(a.mandatory_qualification_missing, 0) AS mandatory_qualification_missing
       FROM posts p
       LEFT JOIN analysis a ON a.post_id = p.id
       {where_sql}
@@ -140,7 +154,13 @@ def list_posts(
 
     with get_db() as db:
         rows = db.execute(query, params).fetchall()
-        total = db.execute("SELECT COUNT(*) AS count FROM posts").fetchone()["count"]
+        count_query = f"""
+          SELECT COUNT(*) AS count
+          FROM posts p
+          LEFT JOIN analysis a ON a.post_id = p.id
+          {where_sql}
+        """
+        total = db.execute(count_query, params[:-2]).fetchone()["count"]
     return {"items": rows, "total": total}
 
 
@@ -151,12 +171,17 @@ def get_post(post_id: int) -> PostDetail:
             """
             SELECT
               p.id, p.post_url, p.post_text, p.poster_name, p.poster_profile_url,
-              p.poster_headline, p.links_in_post, p.saved_at, p.status, p.error_message,
+              p.poster_headline, p.links_in_post, p.saved_at, p.is_important, p.is_irrelevant,
+              p.status, p.error_message,
               a.job_title, a.company_name, a.location, a.remote_status, a.seniority,
-              a.domain, a.compensation, a.must_have_skills, a.nice_to_have_skills,
-              a.experience_years, a.culture_signals, a.red_flags, a.fitment_score,
-              a.fitment_summary, a.strong_matches, a.gaps, a.angles_to_emphasize,
-              a.outreach_talking_points, a.linked_content
+              a.domain, a.compensation, a.company_linkedin_url, a.must_have_skills,
+              a.nice_to_have_skills, a.experience_years, a.required_pm_experience,
+              COALESCE(a.immediate_joiner_preferred, 0) AS immediate_joiner_preferred,
+              a.application_method, a.apply_url, a.culture_signals, a.red_flags, a.fitment_score,
+              a.fitment_summary, a.strong_matches, a.gaps,
+              COALESCE(a.mandatory_qualification_missing, 0) AS mandatory_qualification_missing,
+              a.mandatory_qualification_reasons, a.mandatory_qualification_details,
+              a.angles_to_emphasize, a.outreach_talking_points, a.linked_content
             FROM posts p
             LEFT JOIN analysis a ON a.post_id = p.id
             WHERE p.id = ?
@@ -189,3 +214,39 @@ def delete_post(post_id: int) -> dict[str, str]:
         db.execute("DELETE FROM analysis WHERE post_id = ?", (post_id,))
         db.execute("DELETE FROM posts WHERE id = ?", (post_id,))
     return {"status": "deleted"}
+
+
+@router.patch("/{post_id}/labels")
+def update_post_labels(post_id: int, payload: PostLabelsUpdate) -> dict[str, Any]:
+    with get_db() as db:
+        row = db.execute(
+            "SELECT id, is_important, is_irrelevant FROM posts WHERE id = ?",
+            (post_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Post not found")
+
+        is_important = row["is_important"]
+        is_irrelevant = row["is_irrelevant"]
+
+        if payload.is_important is not None:
+            is_important = int(payload.is_important)
+            if payload.is_important:
+                is_irrelevant = 0
+
+        if payload.is_irrelevant is not None:
+            is_irrelevant = int(payload.is_irrelevant)
+            if payload.is_irrelevant:
+                is_important = 0
+
+        db.execute(
+            "UPDATE posts SET is_important = ?, is_irrelevant = ? WHERE id = ?",
+            (is_important, is_irrelevant, post_id),
+        )
+
+    return {
+        "status": "updated",
+        "post_id": post_id,
+        "is_important": bool(is_important),
+        "is_irrelevant": bool(is_irrelevant),
+    }
