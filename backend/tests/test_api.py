@@ -185,6 +185,45 @@ def test_update_post_labels_is_mutually_exclusive(client):
     assert second.json()["is_important"] is False
 
 
+def test_retry_post_requeues_failed_analysis(client, monkeypatch):
+    from database import get_db
+    from routes import posts as posts_module
+
+    retried = []
+    monkeypatch.setattr(posts_module.worker, "process_post", lambda post_id: retried.append(post_id))
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO posts (id, post_url, post_text, poster_name, poster_headline, links_in_post, saved_at, status, error_message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                "https://linkedin.com/posts/1",
+                "Role text",
+                "Alice",
+                "Product Leader",
+                "[]",
+                "2026-03-20T12:00:00+00:00",
+                "error",
+                "RuntimeError: boom",
+            ),
+        )
+
+    response = client.post("/api/posts/1/retry")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "retry_queued"
+    assert retried == [1]
+
+    with get_db() as db:
+        row = db.execute("SELECT status, error_message FROM posts WHERE id = 1").fetchone()
+
+    assert row["status"] == "pending"
+    assert row["error_message"] is None
+
+
 def test_resume_upload_rejects_non_pdf(client):
     response = client.post(
         "/api/resume/upload",

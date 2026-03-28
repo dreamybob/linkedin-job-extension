@@ -29,6 +29,11 @@ export async function updatePostLabels(id, payload) {
   return data;
 }
 
+export async function retryPostAnalysis(id) {
+  const { data } = await api.post(`/api/posts/${id}/retry`);
+  return data;
+}
+
 export async function fetchResume() {
   const { data } = await api.get("/api/resume");
   return data;

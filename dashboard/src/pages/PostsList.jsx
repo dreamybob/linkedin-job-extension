@@ -1,8 +1,8 @@
 import { Fragment, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BriefcaseBusiness, ChevronLeft, ChevronRight, Search, Star, Tag } from "lucide-react";
+import { BriefcaseBusiness, ChevronLeft, ChevronRight, RotateCcw, Search, Star, Tag } from "lucide-react";
 import { Link } from "react-router-dom";
-import { deletePost, fetchPosts, updatePostLabels } from "../api/client";
+import { deletePost, fetchPosts, retryPostAnalysis, updatePostLabels } from "../api/client";
 import ActionMenu from "../components/ActionMenu";
 import Avatar from "../components/Avatar";
 import FitmentBadge from "../components/FitmentBadge";
@@ -71,6 +71,14 @@ export default function PostsList() {
     mutationFn: deletePost,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: retryPostAnalysis,
+    onSuccess: async (_, id) => {
+      await queryClient.invalidateQueries({ queryKey: ["posts"] });
+      await queryClient.invalidateQueries({ queryKey: ["post", String(id)] });
     },
   });
 
@@ -178,7 +186,12 @@ export default function PostsList() {
                         </td>
                       </tr>
                       {items.map((post) => (
-                        <tr key={post.id} className="align-top transition-colors hover:bg-gray-50">
+                        <tr
+                          key={post.id}
+                          className={`align-top transition-colors hover:bg-gray-50 ${
+                            post.status === "error" ? "bg-red-50/40" : ""
+                          }`}
+                        >
                           <td className="px-6 py-4">
                             <Link to={`/posts/${post.id}`} className="block">
                               <div className="flex items-start gap-3">
@@ -198,7 +211,20 @@ export default function PostsList() {
                             <FitmentBadge score={post.fitment_score} variant="table" />
                           </td>
                           <td className="px-6 py-4">
-                            <StatusBadge status={post.status} />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <StatusBadge status={post.status} />
+                              {post.status === "error" && (
+                                <button
+                                  type="button"
+                                  onClick={() => retryMutation.mutate(post.id)}
+                                  disabled={retryMutation.isPending}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                  Retry
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <PostTags post={post} limit={2} />
@@ -264,6 +290,17 @@ export default function PostsList() {
                       <div className="mt-4 flex flex-wrap gap-2">
                         <FitmentBadge score={post.fitment_score} />
                         <StatusBadge status={post.status} />
+                        {post.status === "error" && (
+                          <button
+                            type="button"
+                            onClick={() => retryMutation.mutate(post.id)}
+                            disabled={retryMutation.isPending}
+                            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            Retry
+                          </button>
+                        )}
                       </div>
 
                       <div className="mt-4 grid gap-3 text-sm text-gray-600 sm:grid-cols-2">

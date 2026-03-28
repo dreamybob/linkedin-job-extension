@@ -82,6 +82,27 @@ def save_post(post: PostIngest, background_tasks: BackgroundTasks) -> dict[str, 
     return JSONResponse(status_code=201, content={"status": "saved", "post_id": post_id})
 
 
+@router.post("/{post_id}/retry")
+def retry_post(post_id: int, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    with get_db() as db:
+        row = db.execute(
+            "SELECT id, status FROM posts WHERE id = ?",
+            (post_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if row["status"] != "error":
+            raise HTTPException(status_code=409, detail="Only failed posts can be retried")
+
+        db.execute(
+            "UPDATE posts SET status = 'pending', error_message = NULL WHERE id = ?",
+            (post_id,),
+        )
+
+    background_tasks.add_task(worker.process_post, post_id)
+    return {"status": "retry_queued", "post_id": post_id}
+
+
 @router.get("")
 def list_posts(
     status: str | None = None,

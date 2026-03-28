@@ -5,16 +5,16 @@ import {
   ArrowLeft,
   Building2,
   ExternalLink,
-  FileText,
   Globe,
   Link2,
   MapPin,
   MessageSquare,
+  RotateCcw,
   Send,
   Trash2,
   UserRound,
 } from "lucide-react";
-import { deletePost, fetchPost, updatePostLabels } from "../api/client";
+import { deletePost, fetchPost, retryPostAnalysis, updatePostLabels } from "../api/client";
 import Avatar from "../components/Avatar";
 import FitmentBadge from "../components/FitmentBadge";
 import GapsList from "../components/GapsList";
@@ -53,6 +53,14 @@ export default function PostDetail() {
     },
   });
 
+  const retryMutation = useMutation({
+    mutationFn: () => retryPostAnalysis(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["post", id] });
+      await queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
   if (isLoading) {
     return <StateCard tone="info" title="Loading analysis" description="Gathering role details and fit signals." />;
   }
@@ -76,6 +84,17 @@ export default function PostDetail() {
         </Link>
 
         <div className="flex flex-wrap gap-3">
+          {data.status === "error" && (
+            <button
+              type="button"
+              onClick={() => retryMutation.mutate()}
+              disabled={retryMutation.isPending}
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Retry
+            </button>
+          )}
           <button
             type="button"
             onClick={() => labelMutation.mutate({ is_important: !data.is_important })}

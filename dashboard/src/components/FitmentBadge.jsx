@@ -7,7 +7,7 @@ const STYLE_MAP = {
 
 function getFitMeta(score) {
   let label = "Fit pending";
-  let shortLabel = "Pending";
+  let shortLabel = "--";
   let style = STYLE_MAP.none;
 
   if (typeof score === "number") {
@@ -33,13 +33,17 @@ export default function FitmentBadge({ score, variant = "default" }) {
   const { label, shortLabel, style } = getFitMeta(score);
 
   if (variant === "table") {
+    if (typeof score !== "number") {
+      return <span className="text-xs font-semibold tabular-nums text-gray-400">--</span>;
+    }
+
     return (
       <div className="inline-flex min-w-[112px] items-center justify-between gap-2 whitespace-nowrap rounded-md border border-gray-200 bg-white px-2.5 py-1">
         <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${style}`}>
           {shortLabel}
         </span>
         <span className="text-xs font-semibold tabular-nums text-gray-700">
-          {typeof score === "number" ? `${score}/10` : "--"}
+          {score}/10
         </span>
       </div>
     );
