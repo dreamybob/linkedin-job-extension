@@ -7,4 +7,4 @@ backend/.env
 backend/db/*.db
 dashboard/node_modules/
 dashboard/dist/
-
+.codex/

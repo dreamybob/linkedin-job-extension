@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BriefcaseBusiness, ChevronLeft, ChevronRight, RotateCcw, Search, Star, Tag } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { deletePost, fetchPosts, retryPostAnalysis, updatePostLabels } from "../api/client";
 import ActionMenu from "../components/ActionMenu";
 import Avatar from "../components/Avatar";
@@ -31,6 +31,7 @@ const TAG_FILTERS = [
 const PAGE_SIZE = 25;
 
 export default function PostsList() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [scoreBand, setScoreBand] = useState("");
   const [tag, setTag] = useState("");
@@ -89,6 +90,15 @@ export default function PostsList() {
   const updateFilter = (setter) => (event) => {
     setPage(1);
     setter(event.target.value);
+  };
+
+  const openPost = (id) => navigate(`/posts/${id}`);
+
+  const handleRowKeyDown = (event, id) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openPost(id);
+    }
   };
 
   return (
@@ -188,20 +198,22 @@ export default function PostsList() {
                       {items.map((post) => (
                         <tr
                           key={post.id}
-                          className={`align-top transition-colors hover:bg-gray-50 ${
+                          className={`cursor-pointer align-top transition-colors hover:bg-gray-50 ${
                             post.status === "error" ? "bg-red-50/40" : ""
                           }`}
+                          onClick={() => openPost(post.id)}
+                          onKeyDown={(event) => handleRowKeyDown(event, post.id)}
+                          tabIndex={0}
+                          role="link"
                         >
                           <td className="px-6 py-4">
-                            <Link to={`/posts/${post.id}`} className="block">
-                              <div className="flex items-start gap-3">
-                                <Avatar name={post.poster_name} />
-                                <div className="min-w-0">
-                                  <p className="truncate text-base font-semibold text-gray-900">{getPostTitle(post)}</p>
-                                  <p className="mt-1 text-sm text-gray-500">{post.poster_name || "Unknown poster"}</p>
-                                </div>
+                            <div className="flex items-start gap-3">
+                              <Avatar name={post.poster_name} />
+                              <div className="min-w-0">
+                                <p className="truncate text-base font-semibold text-gray-900">{getPostTitle(post)}</p>
+                                <p className="mt-1 text-sm text-gray-500">{post.poster_name || "Unknown poster"}</p>
                               </div>
-                            </Link>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <p className="text-sm font-medium text-gray-900">{getPostEyebrow(post)}</p>
@@ -210,7 +222,7 @@ export default function PostsList() {
                           <td className="px-6 py-4">
                             <FitmentBadge score={post.fitment_score} variant="table" />
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
                             <div className="flex flex-wrap items-center gap-2">
                               <StatusBadge status={post.status} />
                               {post.status === "error" && (
@@ -229,7 +241,7 @@ export default function PostsList() {
                           <td className="px-6 py-4">
                             <PostTags post={post} limit={2} />
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
                             <div className="flex justify-end">
                               <ActionMenu
                                 post={post}
@@ -263,9 +275,16 @@ export default function PostsList() {
 
                 <div className="grid gap-4">
                   {items.map((post) => (
-                    <div key={post.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-lg">
+                    <div
+                      key={post.id}
+                      className="cursor-pointer rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-lg"
+                      onClick={() => openPost(post.id)}
+                      onKeyDown={(event) => handleRowKeyDown(event, post.id)}
+                      tabIndex={0}
+                      role="link"
+                    >
                       <div className="flex items-start justify-between gap-3">
-                        <Link to={`/posts/${post.id}`} className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-start gap-3">
                             <Avatar name={post.poster_name} />
                             <div className="min-w-0">
@@ -273,21 +292,23 @@ export default function PostsList() {
                               <p className="mt-1 text-sm text-gray-500">{getPostEyebrow(post)}</p>
                             </div>
                           </div>
-                        </Link>
-                        <ActionMenu
-                          post={post}
-                          disabled={deleteMutation.isPending}
-                          onToggleImportant={() =>
-                            labelMutation.mutate({ id: post.id, payload: { is_important: !post.is_important } })
-                          }
-                          onToggleIrrelevant={() =>
-                            labelMutation.mutate({ id: post.id, payload: { is_irrelevant: !post.is_irrelevant } })
-                          }
-                          onDelete={() => deleteMutation.mutate(post.id)}
-                        />
+                        </div>
+                        <div onClick={(event) => event.stopPropagation()}>
+                          <ActionMenu
+                            post={post}
+                            disabled={deleteMutation.isPending}
+                            onToggleImportant={() =>
+                              labelMutation.mutate({ id: post.id, payload: { is_important: !post.is_important } })
+                            }
+                            onToggleIrrelevant={() =>
+                              labelMutation.mutate({ id: post.id, payload: { is_irrelevant: !post.is_irrelevant } })
+                            }
+                            onDelete={() => deleteMutation.mutate(post.id)}
+                          />
+                        </div>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="mt-4 flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
                         <FitmentBadge score={post.fitment_score} />
                         <StatusBadge status={post.status} />
                         {post.status === "error" && (
