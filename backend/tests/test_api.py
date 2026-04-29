@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from datetime import datetime, timezone
 
 from pypdf import PdfWriter
@@ -12,6 +13,70 @@ def make_pdf_bytes(text: str) -> bytes:
     buffer = io.BytesIO()
     writer.write(buffer)
     return buffer.getvalue()
+
+
+def seed_done_post_with_analysis(post_id: int = 1) -> None:
+    from database import get_db
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO posts (id, post_url, post_text, poster_name, poster_headline, links_in_post, saved_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                post_id,
+                f"https://linkedin.com/posts/{post_id}",
+                "Hiring a product manager",
+                "Alice",
+                "Product Leader",
+                "[]",
+                "2026-03-20T12:00:00+00:00",
+                "done",
+            ),
+        )
+        db.execute(
+            """
+            INSERT INTO analysis (
+              post_id, job_title, company_name, location, remote_status, seniority,
+              must_have_skills, nice_to_have_skills, culture_signals, red_flags,
+              strong_matches, gaps, angles_to_emphasize, outreach_talking_points,
+              fitment_score, fitment_summary
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                post_id,
+                "Senior Product Manager",
+                "Acme",
+                "Remote",
+                "remote",
+                "senior",
+                json.dumps(["Roadmapping"]),
+                json.dumps(["Payments"]),
+                json.dumps(["high autonomy"]),
+                json.dumps([]),
+                json.dumps(["B2B strategy"]),
+                json.dumps(["Payments depth"]),
+                json.dumps(["Emphasize experimentation"]),
+                json.dumps(["Mention PM outcomes"]),
+                7,
+                "Decent fit",
+            ),
+        )
+
+
+def seed_resume(text: str = "Product manager resume text") -> str:
+    from database import get_db
+    from services.gap_analysis import get_resume_version
+
+    with get_db() as db:
+        db.execute("DELETE FROM resume")
+        db.execute(
+            "INSERT INTO resume (filename, raw_text) VALUES (?, ?)",
+            ("resume.pdf", text),
+        )
+    return get_resume_version(text)
 
 
 def test_health(client):
@@ -222,6 +287,244 @@ def test_retry_post_requeues_failed_analysis(client, monkeypatch):
 
     assert row["status"] == "pending"
     assert row["error_message"] is None
+
+
+def test_gap_analysis_without_resume_returns_no_resume(client):
+    seed_done_post_with_analysis()
+
+    response = client.get("/api/posts/1/gap-analysis")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "no_resume"
+
+
+def test_gap_analysis_missing_post_returns_404(client):
+    response = client.get("/api/posts/99/gap-analysis")
+
+    assert response.status_code == 404
+
+
+def test_gap_analysis_waits_for_completed_jd_analysis(client, monkeypatch):
+    from database import get_db
+    from routes import posts as posts_module
+
+    version = seed_resume()
+    queued = []
+    monkeypatch.setattr(posts_module.gap_service, "process_gap_analysis", lambda post_id, resume_version: queued.append(post_id))
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO posts (id, post_url, post_text, poster_name, poster_headline, links_in_post, saved_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                "https://linkedin.com/posts/1",
+                "Role text",
+                "Alice",
+                "Product Leader",
+                "[]",
+                "2026-03-20T12:00:00+00:00",
+                "pending",
+            ),
+        )
+
+    response = client.post("/api/posts/1/gap-analysis")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+    assert response.json()["resume_version"] == version
+    assert queued == []
+
+
+def test_gap_analysis_first_request_queues_pending(client, monkeypatch):
+    from database import get_db
+    from routes import posts as posts_module
+
+    seed_done_post_with_analysis()
+    version = seed_resume()
+    queued = []
+    monkeypatch.setattr(
+        posts_module.gap_service,
+        "process_gap_analysis",
+        lambda post_id, resume_version: queued.append((post_id, resume_version)),
+    )
+
+    response = client.post("/api/posts/1/gap-analysis")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+    assert response.json()["resume_version"] == version
+    assert queued == [(1, version)]
+
+    with get_db() as db:
+        row = db.execute(
+            "SELECT status, error_message FROM gap_analysis WHERE post_id = 1 AND resume_version = ?",
+            (version,),
+        ).fetchone()
+
+    assert row["status"] == "pending"
+    assert row["error_message"] is None
+
+
+def test_gap_analysis_returns_cached_complete_result(client, monkeypatch):
+    from database import get_db
+    from routes import posts as posts_module
+
+    seed_done_post_with_analysis()
+    version = seed_resume()
+    queued = []
+    monkeypatch.setattr(posts_module.gap_service, "process_gap_analysis", lambda post_id, resume_version: queued.append(post_id))
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO gap_analysis (
+              post_id, resume_version, overall_verdict, resume_strengths, gaps, status
+            )
+            VALUES (?, ?, ?, ?, ?, 'complete')
+            """,
+            (
+                1,
+                version,
+                "Good fit with a few positioning gaps.",
+                json.dumps(["Roadmapping"]),
+                json.dumps(
+                    [
+                        {
+                            "rank": 1,
+                            "impact": "medium",
+                            "gap_title": "Payments depth",
+                            "what_is_missing": "Payments examples need more specificity.",
+                            "why_it_matters": "The role emphasizes payments products.",
+                            "resume_evidence": "Led checkout roadmap.",
+                            "suggested_rewrite": "Led checkout roadmap across payment success metrics.",
+                            "rewrite_type": "rephrase_existing",
+                        }
+                    ]
+                ),
+            ),
+        )
+
+    response = client.post("/api/posts/1/gap-analysis")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "complete"
+    assert response.json()["overall_verdict"] == "Good fit with a few positioning gaps."
+    assert response.json()["resume_strengths"] == ["Roadmapping"]
+    assert response.json()["gaps"][0]["gap_title"] == "Payments depth"
+    assert queued == []
+
+
+def test_gap_analysis_new_resume_hash_creates_fresh_row(client, monkeypatch):
+    from database import get_db
+    from routes import posts as posts_module
+
+    seed_done_post_with_analysis()
+    old_version = seed_resume("Old resume text")
+    new_version = seed_resume("New resume text")
+    queued = []
+    monkeypatch.setattr(
+        posts_module.gap_service,
+        "process_gap_analysis",
+        lambda post_id, resume_version: queued.append((post_id, resume_version)),
+    )
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO gap_analysis (post_id, resume_version, overall_verdict, resume_strengths, gaps, status)
+            VALUES (?, ?, 'Old result', '[]', '[]', 'complete')
+            """,
+            (1, old_version),
+        )
+
+    response = client.post("/api/posts/1/gap-analysis")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+    assert response.json()["resume_version"] == new_version
+    assert queued == [(1, new_version)]
+
+    with get_db() as db:
+        count = db.execute("SELECT COUNT(*) AS count FROM gap_analysis WHERE post_id = 1").fetchone()["count"]
+
+    assert count == 2
+
+
+def test_gap_analysis_retry_clears_error_and_queues(client, monkeypatch):
+    from database import get_db
+    from routes import posts as posts_module
+
+    seed_done_post_with_analysis()
+    version = seed_resume()
+    queued = []
+    monkeypatch.setattr(
+        posts_module.gap_service,
+        "process_gap_analysis",
+        lambda post_id, resume_version: queued.append((post_id, resume_version)),
+    )
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO gap_analysis (
+              post_id, resume_version, resume_strengths, gaps, status, error_message
+            )
+            VALUES (?, ?, '[]', '[]', 'error', 'RuntimeError: boom')
+            """,
+            (1, version),
+        )
+
+    response = client.post("/api/posts/1/gap-analysis/retry")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+    assert queued == [(1, version)]
+
+    with get_db() as db:
+        row = db.execute(
+            "SELECT status, error_message FROM gap_analysis WHERE post_id = 1 AND resume_version = ?",
+            (version,),
+        ).fetchone()
+
+    assert row["status"] == "pending"
+    assert row["error_message"] is None
+
+
+def test_gap_analysis_ai_failure_stores_error(client, monkeypatch):
+    from database import get_db
+    from routes import posts as posts_module
+
+    seed_done_post_with_analysis()
+    version = seed_resume()
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO gap_analysis (post_id, resume_version, resume_strengths, gaps, status)
+            VALUES (?, ?, '[]', '[]', 'pending')
+            """,
+            (1, version),
+        )
+
+    monkeypatch.setattr(
+        posts_module.gap_service.ai_analyzer,
+        "analyze_resume_gaps",
+        lambda resume_text, jd_signals: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    posts_module.gap_service.process_gap_analysis(1, version)
+
+    with get_db() as db:
+        row = db.execute(
+            "SELECT status, error_message FROM gap_analysis WHERE post_id = 1 AND resume_version = ?",
+            (version,),
+        ).fetchone()
+
+    assert row["status"] == "error"
+    assert row["error_message"] == "RuntimeError: boom"
 
 
 def test_resume_upload_rejects_non_pdf(client):

@@ -74,6 +74,39 @@ class FitmentAnalysis(BaseModel):
         return value or []
 
 
+class GapItem(BaseModel):
+    rank: int
+    impact: Literal["high", "medium", "low"] = "low"
+    gap_title: str
+    what_is_missing: str
+    why_it_matters: str
+    resume_evidence: str | None = None
+    suggested_rewrite: str
+    rewrite_type: Literal[
+        "rephrase_existing",
+        "add_new_bullet",
+        "restructure_section",
+        "no_fix_possible",
+    ]
+
+
+class GapAnalysis(BaseModel):
+    overall_verdict: str | None = None
+    resume_strengths: list[str] = Field(default_factory=list)
+    gaps: list[GapItem] = Field(default_factory=list)
+
+    @field_validator("resume_strengths", "gaps", mode="before")
+    @classmethod
+    def default_gap_lists(cls, value):
+        return value or []
+
+
+class GapAnalysisResponse(GapAnalysis):
+    status: Literal["pending", "complete", "error", "no_resume"]
+    error_message: str | None = None
+    resume_version: str | None = None
+
+
 class PostSummary(BaseModel):
     id: int
     post_url: str

@@ -34,6 +34,21 @@ export async function retryPostAnalysis(id) {
   return data;
 }
 
+export async function fetchGapAnalysis(id) {
+  const { data } = await api.get(`/api/posts/${id}/gap-analysis`);
+  return data;
+}
+
+export async function ensureGapAnalysis(id) {
+  const { data } = await api.post(`/api/posts/${id}/gap-analysis`);
+  return data;
+}
+
+export async function retryGapAnalysis(id) {
+  const { data } = await api.post(`/api/posts/${id}/gap-analysis/retry`);
+  return data;
+}
+
 export async function fetchResume() {
   const { data } = await api.get("/api/resume");
   return data;

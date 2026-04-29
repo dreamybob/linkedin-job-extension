@@ -8,7 +8,7 @@ from google.genai import types
 from pydantic import BaseModel, ValidationError
 
 from config import settings
-from models.post import FitmentAnalysis, RequirementsExtraction, RoleExtraction
+from models.post import GapAnalysis, FitmentAnalysis, RequirementsExtraction, RoleExtraction
 
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -18,6 +18,21 @@ SYSTEM_PROMPT = (
     "You extract structured information from LinkedIn job posts. "
     "Always respond in valid JSON only. No preamble, no explanation. "
     "If a field cannot be determined, use null."
+)
+
+GAP_ANALYSIS_SYSTEM_PROMPT = (
+    "You are a resume coach specializing in helping candidates reposition "
+    "their existing experience to match a specific job description. "
+    "Your job is not to evaluate the candidate harshly. "
+    "Your job is to find what is already in their resume that can be "
+    "reframed, reworded, or emphasized, and only flag genuine gaps "
+    "when nothing in the resume can bridge them. "
+    "Strict rules: output only valid JSON; include max 5 gap items ranked "
+    "by shortlisting impact; scan the resume for related experience before "
+    "calling something a hard gap; suggested_rewrite must be concrete and "
+    "copy-paste ready; do not invent experience; keep every text field concise. "
+    "Impact levels: high means likely rejection or a significant score drop, "
+    "medium means noticeable but not a dealbreaker, low means polish-level."
 )
 
 
@@ -58,7 +73,12 @@ class AIAnalyzer:
 
         self.client = genai.Client(**client_kwargs) if client_kwargs else None
 
-    def _complete_json(self, prompt: str, schema: type[ModelT]) -> ModelT:
+    def _complete_json(
+        self,
+        prompt: str,
+        schema: type[ModelT],
+        system_instruction: str = SYSTEM_PROMPT,
+    ) -> ModelT:
         if not self.client:
             raise RuntimeError(
                 "No Gemini credentials are configured. Set VERTEX_AI_API_KEY or GEMINI_API_KEY."
@@ -68,7 +88,7 @@ class AIAnalyzer:
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=system_instruction,
                 response_mime_type="application/json",
                 response_schema=schema,
             ),
@@ -128,3 +148,35 @@ class AIAnalyzer:
             "or location eligibility."
         )
         return self._complete_json(prompt, FitmentAnalysis)
+
+    def analyze_resume_gaps(self, resume_text: str, jd_signals: dict) -> GapAnalysis:
+        prompt = (
+            "You will be given two inputs:\n"
+            "1. STRUCTURED JD SIGNALS (JSON): The analyzed requirements of the job.\n"
+            "2. RESUME TEXT: The candidate's raw resume content.\n\n"
+            "Your task: Identify the top gaps between the resume and the job, "
+            "ranked by shortlisting impact. For each gap, find the closest "
+            "existing evidence in the resume and suggest a concrete rewrite.\n\n"
+            "Return this exact JSON structure:\n"
+            "{\n"
+            '  "overall_verdict": string,\n'
+            '  "resume_strengths": string[],\n'
+            '  "gaps": [\n'
+            "    {\n"
+            '      "rank": number,\n'
+            '      "impact": "high" | "medium" | "low",\n'
+            '      "gap_title": string,\n'
+            '      "what_is_missing": string,\n'
+            '      "why_it_matters": string,\n'
+            '      "resume_evidence": string | null,\n'
+            '      "suggested_rewrite": string,\n'
+            '      "rewrite_type": "rephrase_existing" | "add_new_bullet" | "restructure_section" | "no_fix_possible"\n'
+            "    }\n"
+            "  ]\n"
+            "}\n\n"
+            "STRUCTURED JD SIGNALS:\n"
+            f"{json.dumps(jd_signals, indent=2)}\n\n"
+            "RESUME TEXT:\n"
+            f"{resume_text}"
+        )
+        return self._complete_json(prompt, GapAnalysis, GAP_ANALYSIS_SYSTEM_PROMPT)

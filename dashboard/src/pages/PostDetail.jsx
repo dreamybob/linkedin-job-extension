@@ -3,32 +3,52 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  BadgeDollarSign,
+  BriefcaseBusiness,
   Building2,
+  CalendarDays,
+  Check,
+  Clipboard,
   ExternalLink,
+  FileText,
   Globe,
   Link2,
   Loader2,
   MapPin,
-  MessageSquare,
   RotateCcw,
-  Send,
+  Sparkles,
   Trash2,
   UserRound,
+  Wrench,
 } from "lucide-react";
-import { deletePost, fetchPost, retryPostAnalysis, updatePostLabels } from "../api/client";
-import Avatar from "../components/Avatar";
+import {
+  deletePost,
+  ensureGapAnalysis,
+  fetchPost,
+  retryGapAnalysis,
+  retryPostAnalysis,
+  updatePostLabels,
+} from "../api/client";
 import FitmentBadge from "../components/FitmentBadge";
-import GapsList from "../components/GapsList";
-import PostTags from "../components/PostTags";
-import RequirementsList from "../components/RequirementsList";
 import StatusBadge from "../components/StatusBadge";
 import { usePollingInterval } from "../hooks/usePollingInterval";
-import { formatSavedDateTime } from "../utils/formatting";
-import { getPostEyebrow, getPostTitle } from "../utils/postPresentation";
+import { formatSavedDate } from "../utils/formatting";
+import { getPostTitle } from "../utils/postPresentation";
+
+const TABS = [
+  { id: "fix", label: "Fix My Resume" },
+  { id: "understand", label: "Understand This Role" },
+];
+
+const REWRITE_LABELS = {
+  rephrase_existing: "Replace in Resume",
+  add_new_bullet: "Add to Resume",
+  restructure_section: "Restructure Section",
+};
 
 export default function PostDetail() {
   const { id } = useParams();
-  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState("fix");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -36,6 +56,14 @@ export default function PostDetail() {
     queryKey: ["post", id],
     queryFn: () => fetchPost(id),
     refetchInterval: (query) => usePollingInterval(query.state.data?.status),
+  });
+
+  const shouldLoadGapAnalysis = data?.status === "done";
+  const gapQuery = useQuery({
+    queryKey: ["gap-analysis", id],
+    queryFn: () => ensureGapAnalysis(id),
+    enabled: Boolean(id && shouldLoadGapAnalysis),
+    refetchInterval: (query) => (query.state.data?.status === "pending" ? 3000 : false),
   });
 
   const deleteMutation = useMutation({
@@ -59,6 +87,14 @@ export default function PostDetail() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["post", id] });
       await queryClient.invalidateQueries({ queryKey: ["posts"] });
+      await queryClient.invalidateQueries({ queryKey: ["gap-analysis", id] });
+    },
+  });
+
+  const gapRetryMutation = useMutation({
+    mutationFn: () => retryGapAnalysis(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["gap-analysis", id] });
     },
   });
 
@@ -68,30 +104,16 @@ export default function PostDetail() {
   if ((error || !data) && !isLoading) {
     return (
       <section className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-blue-700">
-            <ArrowLeft className="h-4 w-4" />
-            Back to posts
-          </Link>
-        </div>
+        <TopBackLink />
         <StateCard tone="error" title="Failed to load post" description="The detail view could not be loaded." />
       </section>
     );
   }
 
-  const fitmentSummary =
-    data?.fitment_summary ||
-    (data?.status === "error"
-      ? data?.error_message || "Analysis failed before the role could be extracted."
-      : "Analysis is still in progress.");
-
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-blue-700">
-          <ArrowLeft className="h-4 w-4" />
-          Back to posts
-        </Link>
+        <TopBackLink />
 
         <div className="flex flex-wrap gap-3">
           {hasLoadedPost && data.status === "error" && (
@@ -147,176 +169,375 @@ export default function PostDetail() {
       )}
 
       {hasLoadedPost && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-panel">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-gray-500">{getPostEyebrow(data)}</p>
-              <h1 className="mt-2 text-3xl font-bold text-gray-900">{getPostTitle(data)}</h1>
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <Avatar name={data.poster_name} size="md" />
-                <div className="min-w-0">
-                  {data.poster_profile_url ? (
-                    <a
-                      href={data.poster_profile_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:underline"
-                    >
-                      {data.poster_name || "Unknown poster"}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  ) : (
-                    <p className="text-sm font-semibold text-gray-900">{data.poster_name || "Unknown poster"}</p>
-                  )}
-                  <p className="text-sm text-gray-500">{data.poster_headline || "Poster headline not available"}</p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <PostTags post={data} />
-              </div>
-              {data.error_message && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{data.error_message}</p>}
-            </div>
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px] xl:items-start">
+          <div className="space-y-6">
+            <HeaderCard post={data} />
 
-            <div className="flex flex-wrap gap-2">
-              <FitmentBadge score={data.fitment_score} />
-              <StatusBadge status={data.status} />
-            </div>
-          </div>
+            {isPendingState && <AnalysisInProgressState status={data.status} postUrl={data.post_url} />}
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-4">
-            <InfoCard icon={Building2} title="Company" value={data.company_name || "Unknown"} />
-            <InfoCard icon={MapPin} title="Location" value={data.location || "Unknown"} />
-            <InfoCard icon={Globe} title="Work mode" value={data.remote_status || "Unknown"} />
-            <InfoCard icon={UserRound} title="Saved on" value={formatSavedDateTime(data.saved_at)} />
-            <InfoCard icon={Link2} title="Company profile" value={<ExternalValue href={data.company_linkedin_url}>Open company on LinkedIn</ExternalValue>} />
-            <InfoCard icon={Send} title="Apply method" value={data.application_method || "Unknown"} />
-            <InfoCard icon={MessageSquare} title="Required PM experience" value={data.required_pm_experience || data.experience_years || "Not specified"} />
-            <InfoCard icon={ExternalLink} title="Post URL" value={<ExternalValue href={data.post_url}>Open LinkedIn post</ExternalValue>} />
-          </div>
-        </div>
-      )}
-
-      {hasLoadedPost && isPendingState && <AnalysisInProgressState status={data.status} postUrl={data.post_url} />}
-
-      {hasLoadedPost && data.status === "error" && (
-        <StateCard
-          tone="error"
-          title="Analysis failed"
-          description="We could not complete extraction for this post. You can retry now, or return to the list and continue reviewing other saved roles."
-        />
-      )}
-
-      {hasLoadedPost && !isPendingState && (
-        <>
-          <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900">Fitment summary</h2>
-            <p className="mt-3 text-sm leading-7 text-gray-700">{fitmentSummary}</p>
-          </section>
-
-          <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900">Application guidance</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <DetailLine label="Application method" value={data.application_method || "Unknown"} />
-              <DetailLine label="Apply link" value={<ExternalValue href={data.apply_url}>Open application link</ExternalValue>} />
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900">Qualification checks</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className={`rounded-lg border p-4 ${data.immediate_joiner_preferred ? "border-purple-200 bg-purple-50" : "border-gray-200 bg-gray-50"}`}>
-                <p className="text-sm font-medium text-gray-500">Immediate Joiner Preferred</p>
-                <p className={`mt-2 text-sm font-semibold ${data.immediate_joiner_preferred ? "text-purple-700" : "text-gray-700"}`}>
-                  {data.immediate_joiner_preferred ? "Yes, called out in the post." : "Not clearly required."}
-                </p>
-              </div>
-              <div className={`rounded-lg border p-4 ${data.mandatory_qualification_missing ? "border-amber-200 bg-amber-50" : "border-gray-200 bg-gray-50"}`}>
-                <p className="text-sm font-medium text-gray-500">Mandatory Qualification Missing</p>
-                <p className={`mt-2 text-sm font-semibold ${data.mandatory_qualification_missing ? "text-amber-700" : "text-gray-700"}`}>
-                  {data.mandatory_qualification_missing ? "Potential blocker detected." : "No clear mandatory blocker detected."}
-                </p>
-              </div>
-            </div>
-
-            {data.mandatory_qualification_reasons?.length > 0 && (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-medium text-amber-700">What appears to be missing</p>
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-700">
-                  {data.mandatory_qualification_reasons.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                {data.mandatory_qualification_details?.length > 0 && (
-                  <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-amber-700">
-                    {data.mandatory_qualification_details.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+            {data.status === "error" && (
+              <StateCard
+                tone="error"
+                title="Analysis failed"
+                description="We could not complete extraction for this post. You can retry now, or return to the list and continue reviewing other saved roles."
+              />
             )}
-          </section>
 
-          <RequirementsList
-            mustHaveSkills={data.must_have_skills}
-            niceToHaveSkills={data.nice_to_have_skills}
-            experienceYears={data.experience_years}
-            cultureSignals={data.culture_signals}
-            redFlags={data.red_flags}
-          />
+            {data.status === "done" && (
+              <section className="space-y-5">
+                <JobDetailTabs activeTab={activeTab} onChange={setActiveTab} />
+                {activeTab === "fix" ? (
+                  <FixMyResumeTab
+                    fitmentScore={data.fitment_score}
+                    gapAnalysis={gapQuery.data}
+                    isLoading={gapQuery.isLoading || (gapQuery.isFetching && !gapQuery.data)}
+                    isRetrying={gapRetryMutation.isPending}
+                    onRetry={() => gapRetryMutation.mutate()}
+                  />
+                ) : (
+                  <ComingSoonPanel />
+                )}
+              </section>
+            )}
+          </div>
 
-          <GapsList
-            strongMatches={data.strong_matches}
-            gaps={data.gaps}
-            anglesToEmphasize={data.angles_to_emphasize}
-            outreachTalkingPoints={data.outreach_talking_points}
-          />
-
-          <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900">Linked content</h2>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-700">
-              {data.linked_content || "No external links were fetched for this post."}
-            </p>
-          </section>
-
-          <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-bold text-gray-900">Original post text</h2>
-              <button
-                type="button"
-                onClick={() => setExpanded((current) => !current)}
-                className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200"
-              >
-                {expanded ? "Collapse" : "Expand"}
-              </button>
-            </div>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-700">
-              {expanded ? data.post_text : `${data.post_text.slice(0, 700)}${data.post_text.length > 700 ? "…" : ""}`}
-            </p>
-          </section>
-        </>
+          <aside className="space-y-4">
+            <FitOverviewCard score={data.fitment_score} status={data.status} />
+            <JobMetadataPanel post={data} />
+          </aside>
+        </div>
       )}
     </section>
   );
 }
 
-function InfoCard({ icon: Icon, title, value }) {
+function TopBackLink() {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
-        <Icon className="h-4 w-4 text-gray-400" />
-        <span>{title}</span>
+    <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-blue-700">
+      <ArrowLeft className="h-4 w-4" />
+      Back to posts
+    </Link>
+  );
+}
+
+function HeaderCard({ post }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-panel">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-gray-500">Post detail</p>
+        <h1 className="mt-3 text-3xl font-bold text-gray-900 sm:text-4xl">{getPostTitle(post)}</h1>
+        <div className="mt-4 flex items-center gap-3 text-lg font-semibold text-gray-700">
+          <Building2 className="h-5 w-5 text-gray-400" />
+          <span>{post.company_name || "Company not mentioned"}</span>
+        </div>
+        {post.error_message && <p className="mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{post.error_message}</p>}
       </div>
-      <div className="mt-2 text-sm text-gray-700">{value}</div>
     </div>
   );
 }
 
-function DetailLine({ label, value }) {
+function JobDetailTabs({ activeTab, onChange }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-      <p className="text-sm font-medium text-gray-500">{label}</p>
-      <div className="mt-2 text-sm text-gray-700">{value}</div>
+    <div className="flex justify-end border-b border-gray-200">
+      <div className="flex flex-wrap justify-end gap-2">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+              activeTab === tab.id
+                ? "border-blue-600 text-blue-700"
+                : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-800"
+            }`}
+          >
+            {tab.label}
+            {tab.id === "understand" && <span className="ml-2 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-500">Soon</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FixMyResumeTab({ fitmentScore, gapAnalysis, isLoading, isRetrying, onRetry }) {
+  if (isLoading || !gapAnalysis || gapAnalysis.status === "pending") {
+    return <GapAnalysisSkeleton />;
+  }
+
+  if (gapAnalysis.status === "no_resume") {
+    return (
+      <EmptyTabState
+        icon={FileText}
+        title="Add your resume to see personalised fixes."
+        action={<Link to="/resume" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Open Resume</Link>}
+      />
+    );
+  }
+
+  if (gapAnalysis.status === "error") {
+    return (
+      <EmptyTabState
+        icon={RotateCcw}
+        title="We couldn't analyse your resume right now. Try again."
+        description={gapAnalysis.error_message}
+        action={
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={isRetrying}
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            <RotateCcw className="h-4 w-4" />
+            {isRetrying ? "Retrying..." : "Retry"}
+          </button>
+        }
+      />
+    );
+  }
+
+  const sortedGaps = [...(gapAnalysis.gaps || [])].sort((left, right) => left.rank - right.rank).slice(0, 5);
+
+  return (
+    <div className="space-y-5">
+      <VerdictBanner verdict={gapAnalysis.overall_verdict} fitmentScore={fitmentScore} />
+      <ResumeStrengths strengths={gapAnalysis.resume_strengths} />
+      {sortedGaps.length ? (
+        <div className="space-y-4">
+          {sortedGaps.map((gap, index) => (
+            <GapCard key={`${gap.rank}-${gap.gap_title}`} gap={gap} fallbackRank={index + 1} />
+          ))}
+        </div>
+      ) : (
+        <EmptyTabState icon={Sparkles} title="Your resume looks well-aligned with this role." />
+      )}
+    </div>
+  );
+}
+
+function VerdictBanner({ verdict, fitmentScore }) {
+  const tone = getVerdictTone(fitmentScore);
+
+  return (
+    <section className={`rounded-lg border p-5 ${tone.container}`}>
+      <div className="flex items-start gap-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${tone.icon}`}>
+          <Wrench className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-gray-500">Verdict</p>
+          <p className={`mt-2 text-base font-semibold leading-7 ${tone.text}`}>
+            {verdict || "Gap analysis completed for this role."}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ResumeStrengths({ strengths }) {
+  const visibleStrengths = (strengths || []).slice(0, 3);
+  if (!visibleStrengths.length) {
+    return null;
+  }
+
+  return (
+    <section>
+      <h2 className="text-lg font-bold text-gray-900">What's Working</h2>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {visibleStrengths.map((strength) => (
+          <span key={strength} className="rounded-md border border-green-200 bg-green-50 px-3 py-1 text-sm font-medium text-green-700">
+            {strength}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GapCard({ gap, fallbackRank }) {
+  const [copied, setCopied] = useState(false);
+  const noFix = gap.rewrite_type === "no_fix_possible";
+  const ctaLabel = REWRITE_LABELS[gap.rewrite_type] || "Copy Rewrite";
+
+  const copyRewrite = async () => {
+    await copyText(gap.suggested_rewrite || "");
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <article className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ImpactBadge impact={gap.impact} />
+        <span className="text-sm font-bold text-gray-400">#{gap.rank || fallbackRank}</span>
+      </div>
+
+      <div className="mt-4">
+        <h3 className="text-xl font-bold text-gray-900">{gap.gap_title}</h3>
+        <p className="mt-2 text-sm leading-6 text-gray-700">{gap.what_is_missing}</p>
+        <p className="mt-3 text-sm leading-6 text-gray-500">{gap.why_it_matters}</p>
+      </div>
+
+      {gap.resume_evidence && (
+        <div className="mt-5 rounded-md border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <FileText className="h-4 w-4 text-gray-400" />
+            From your resume
+          </div>
+          <p className="mt-2 text-sm leading-6 text-gray-600">"{gap.resume_evidence}"</p>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 p-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+          <Clipboard className="h-4 w-4" />
+          Suggested rewrite
+        </div>
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-blue-950">"{gap.suggested_rewrite}"</p>
+
+        {noFix ? (
+          <p className="mt-4 text-sm font-medium text-amber-700">
+            This is a genuine gap. Consider addressing it in your cover letter.
+          </p>
+        ) : (
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={copyRewrite}
+              className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
+              {copied ? "Copied!" : "Copy"}
+            </button>
+            <button
+              type="button"
+              onClick={copyRewrite}
+              className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              {ctaLabel}
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Direct resume editing coming soon."
+              className="cursor-not-allowed rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-400"
+            >
+              Apply
+            </button>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function ImpactBadge({ impact }) {
+  const normalized = impact || "low";
+  const styles = {
+    high: "border-red-200 bg-red-50 text-red-700",
+    medium: "border-amber-200 bg-amber-50 text-amber-700",
+    low: "border-gray-200 bg-gray-50 text-gray-700",
+  };
+
+  return (
+    <span className={`rounded-md border px-2.5 py-0.5 text-xs font-medium ${styles[normalized] || styles.low}`}>
+      {normalized}
+    </span>
+  );
+}
+
+function GapAnalysisSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[1, 2, 3].map((item) => (
+        <div key={item} className="animate-pulse rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="h-6 w-28 rounded bg-gray-200" />
+          <div className="mt-5 h-5 w-2/3 rounded bg-gray-200" />
+          <div className="mt-3 h-4 w-full rounded bg-gray-100" />
+          <div className="mt-2 h-4 w-5/6 rounded bg-gray-100" />
+          <div className="mt-5 h-24 rounded-md bg-gray-100" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyTabState({ icon: Icon, title, description, action }) {
+  return (
+    <section className="rounded-lg border border-dashed border-gray-300 bg-white p-10 text-center shadow-sm">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-gray-100 text-gray-500">
+        <Icon className="h-5 w-5" />
+      </div>
+      <h2 className="mt-4 text-lg font-bold text-gray-900">{title}</h2>
+      {description && <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-500">{description}</p>}
+      {action && <div className="mt-5">{action}</div>}
+    </section>
+  );
+}
+
+function ComingSoonPanel() {
+  return <EmptyTabState icon={Sparkles} title="Understand This Role is coming soon." />;
+}
+
+function FitOverviewCard({ score, status }) {
+  const scoreMeta = getFitScoreMeta(score);
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-panel">
+      <p className="text-sm font-medium text-gray-500">Fit score</p>
+      <div className="mt-5 flex items-end gap-2">
+        <span className="text-4xl font-bold text-gray-900">{scoreMeta.value}</span>
+        <span className="pb-1 text-base font-semibold text-gray-400">/10</span>
+      </div>
+      <p className="mt-3 text-sm font-semibold text-gray-900">{scoreMeta.label}</p>
+      <p className="mt-1 text-sm leading-6 text-gray-600">{scoreMeta.description}</p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <FitmentBadge score={score} />
+        <StatusBadge status={status} />
+      </div>
+    </section>
+  );
+}
+
+function JobMetadataPanel({ post }) {
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-panel">
+      <p className="text-sm font-semibold text-gray-500">Job metadata</p>
+
+      <div className="mt-6 space-y-5">
+        <MetadataItem
+          icon={UserRound}
+          label="Posted by"
+          value={
+            post.poster_profile_url ? (
+              <ExternalValue href={post.poster_profile_url}>{post.poster_name || "Open profile"}</ExternalValue>
+            ) : (
+              post.poster_name || "Not mentioned"
+            )
+          }
+        />
+        <MetadataItem icon={MapPin} label="Location" value={post.location || "Not mentioned"} />
+        <MetadataItem icon={Globe} label="Work mode" value={formatWorkMode(post.remote_status)} />
+        <MetadataItem icon={BriefcaseBusiness} label="Seniority" value={post.seniority || "Not mentioned"} />
+        <MetadataItem icon={CalendarDays} label="Saved on" value={formatSavedDate(post.saved_at)} />
+        <MetadataItem icon={Link2} label="Post link" value={<ExternalValue href={post.post_url}>Open LinkedIn post</ExternalValue>} />
+        <MetadataItem icon={BadgeDollarSign} label="Compensation" value={post.compensation || "Not mentioned"} />
+      </div>
+    </section>
+  );
+}
+
+function MetadataItem({ icon: Icon, label, value }) {
+  return (
+    <div className="flex gap-3 border-b border-gray-100 pb-5 last:border-b-0 last:pb-0">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-gray-500">{label}</p>
+        <div className="mt-1 text-sm font-medium leading-6 text-gray-800">{value}</div>
+      </div>
     </div>
   );
 }
@@ -346,6 +567,105 @@ function StateCard({ tone, title, description }) {
       <p className="mt-2 text-sm">{description}</p>
     </div>
   );
+}
+
+function getFitScoreMeta(score) {
+  if (typeof score !== "number") {
+    return {
+      value: "--",
+      label: "Fit pending",
+      description: "We will show a scored fit view here once analysis completes.",
+    };
+  }
+
+  if (score >= 8) {
+    return {
+      value: score.toFixed(1).replace(".0", ""),
+      label: "High alignment",
+      description: "This role appears strongly aligned with your current experience.",
+    };
+  }
+
+  if (score >= 5) {
+    return {
+      value: score.toFixed(1).replace(".0", ""),
+      label: "Medium alignment",
+      description: "There is meaningful overlap, with a few areas worth positioning carefully.",
+    };
+  }
+
+  return {
+    value: score.toFixed(1).replace(".0", ""),
+    label: "Low alignment",
+    description: "The role has several gaps relative to your current profile.",
+  };
+}
+
+function getVerdictTone(score) {
+  if (typeof score !== "number") {
+    return {
+      container: "border-gray-200 bg-gray-50",
+      icon: "bg-white text-gray-500",
+      text: "text-gray-800",
+    };
+  }
+
+  if (score >= 8) {
+    return {
+      container: "border-green-200 bg-green-50",
+      icon: "bg-white text-green-700",
+      text: "text-green-900",
+    };
+  }
+
+  if (score >= 5) {
+    return {
+      container: "border-amber-200 bg-amber-50",
+      icon: "bg-white text-amber-700",
+      text: "text-amber-900",
+    };
+  }
+
+  return {
+    container: "border-red-200 bg-red-50",
+    icon: "bg-white text-red-700",
+    text: "text-red-900",
+  };
+}
+
+function formatWorkMode(value) {
+  if (!value) {
+    return "Not mentioned";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes("hybrid")) {
+    return "Hybrid";
+  }
+  if (normalized.includes("remote") || normalized.includes("wfh")) {
+    return "WFH";
+  }
+  if (normalized.includes("on-site") || normalized.includes("onsite") || normalized.includes("office") || normalized.includes("wfo")) {
+    return "WFO";
+  }
+
+  return value;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textArea);
 }
 
 function AnalysisInProgressState({ status, postUrl }) {

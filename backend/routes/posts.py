@@ -7,12 +7,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from database import get_db
-from models.post import PostDetail, PostIngest, PostLabelsUpdate
+from models.post import GapAnalysisResponse, PostDetail, PostIngest, PostLabelsUpdate
 from services.background_worker import BackgroundWorker
+from services.gap_analysis import GapAnalysisService
 
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 worker = BackgroundWorker()
+gap_service = GapAnalysisService()
 
 
 def _loads_list(value: str | None) -> list[str]:
@@ -101,6 +103,21 @@ def retry_post(post_id: int, background_tasks: BackgroundTasks) -> dict[str, Any
 
     background_tasks.add_task(worker.process_post, post_id)
     return {"status": "retry_queued", "post_id": post_id}
+
+
+@router.get("/{post_id}/gap-analysis")
+def get_gap_analysis(post_id: int) -> GapAnalysisResponse:
+    return gap_service.get_current(post_id)
+
+
+@router.post("/{post_id}/gap-analysis")
+def ensure_gap_analysis(post_id: int, background_tasks: BackgroundTasks) -> GapAnalysisResponse:
+    return gap_service.ensure_current(post_id, background_tasks)
+
+
+@router.post("/{post_id}/gap-analysis/retry")
+def retry_gap_analysis(post_id: int, background_tasks: BackgroundTasks) -> GapAnalysisResponse:
+    return gap_service.retry_current(post_id, background_tasks)
 
 
 @router.get("")

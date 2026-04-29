@@ -99,6 +99,7 @@ def init_db() -> None:
         _ensure_column(connection, "analysis", "mandatory_qualification_missing", "INTEGER DEFAULT 0")
         _ensure_column(connection, "analysis", "mandatory_qualification_reasons", "TEXT")
         _ensure_column(connection, "analysis", "mandatory_qualification_details", "TEXT")
+        _ensure_column(connection, "gap_analysis", "updated_at", "TEXT")
         connection.commit()
 
 

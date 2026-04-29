@@ -53,3 +53,17 @@ CREATE TABLE IF NOT EXISTS resume (
   raw_text TEXT,
   uploaded_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS gap_analysis (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  resume_version TEXT NOT NULL,
+  overall_verdict TEXT,
+  resume_strengths TEXT,
+  gaps TEXT,
+  status TEXT DEFAULT 'pending',
+  error_message TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(post_id, resume_version)
+);
