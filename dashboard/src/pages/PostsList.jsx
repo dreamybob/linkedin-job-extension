@@ -79,7 +79,7 @@ export default function PostsList() {
     mutationFn: retryPostAnalysis,
     onSuccess: async (_, id) => {
       await queryClient.invalidateQueries({ queryKey: ["posts"] });
-      await queryClient.invalidateQueries({ queryKey: ["post", String(id)] });
+      await queryClient.invalidateQueries({ queryKey: ["post-resume", String(id)] });
     },
   });
 
@@ -92,7 +92,7 @@ export default function PostsList() {
     setter(event.target.value);
   };
 
-  const openPost = (id) => navigate(`/posts/${id}`);
+  const openPost = (id) => navigate(`/posts/${id}/resume`);
 
   const handleRowKeyDown = (event, id) => {
     if (event.key === "Enter" || event.key === " ") {

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Trash2, UploadCloud } from "lucide-react";
-import { deleteResume, fetchResume, uploadResume } from "../api/client";
+import { AlertTriangle, FileText, Trash2, UploadCloud } from "lucide-react";
+import { deleteResume, fetchStructuredResume, uploadResume } from "../api/client";
 import { formatSavedDateTime } from "../utils/formatting";
 
 export default function Resume() {
@@ -10,8 +10,8 @@ export default function Resume() {
   const [progress, setProgress] = useState(0);
 
   const resumeQuery = useQuery({
-    queryKey: ["resume"],
-    queryFn: fetchResume,
+    queryKey: ["resume-structured"],
+    queryFn: fetchStructuredResume,
     retry: false,
   });
 
@@ -24,7 +24,7 @@ export default function Resume() {
       }),
     onSuccess: async () => {
       setProgress(100);
-      await queryClient.invalidateQueries({ queryKey: ["resume"] });
+      await queryClient.invalidateQueries({ queryKey: ["resume-structured"] });
     },
   });
 
@@ -32,12 +32,18 @@ export default function Resume() {
     mutationFn: deleteResume,
     onSuccess: async () => {
       setProgress(0);
-      await queryClient.invalidateQueries({ queryKey: ["resume"] });
+      await queryClient.invalidateQueries({ queryKey: ["resume-structured"] });
     },
   });
 
   const handleFile = (file) => {
     if (!file) return;
+    const confirmed = window.confirm(
+      "Upload this as your new active resume? Existing job analyses will stay as-is and will not be re-run automatically."
+    );
+    if (!confirmed) {
+      return;
+    }
     setProgress(0);
     uploadMutation.mutate(file);
   };
@@ -48,8 +54,22 @@ export default function Resume() {
         <p className="text-sm font-medium text-gray-500">Resume Management</p>
         <h1 className="mt-2 text-3xl font-bold text-gray-900">Keep one active resume on file</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
-          New uploads replace the existing resume. Previously analyzed posts stay as-is; only future saved roles use the latest resume.
+          New uploads become the active source for future analysis. Existing job reviews stay frozen on the resume version they were built against.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-amber-600">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Uploading a new resume does not re-run older job analyses</p>
+            <p className="mt-1 text-sm leading-6 text-amber-700">
+              Previously reviewed jobs keep their current overlays and scores. Only future jobs use the newly uploaded resume until you retry an existing review.
+            </p>
+          </div>
+        </div>
       </div>
 
       <button
@@ -102,7 +122,9 @@ export default function Resume() {
                 <p className="text-sm font-medium text-gray-500">Current resume</p>
                 <h2 className="mt-1 text-lg font-semibold text-gray-900">{resumeQuery.data.filename}</h2>
                 <p className="mt-2 text-sm text-gray-500">Uploaded {formatSavedDateTime(resumeQuery.data.uploaded_at)}</p>
-                <p className="mt-1 text-sm text-gray-500">{resumeQuery.data.text_length} characters extracted</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  {resumeQuery.data.sections.length} structured section{resumeQuery.data.sections.length === 1 ? "" : "s"} detected
+                </p>
               </div>
             </div>
             <button
@@ -115,8 +137,36 @@ export default function Resume() {
             </button>
           </div>
           <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <p className="text-sm font-medium text-gray-500">Preview</p>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-700">{resumeQuery.data.preview_text}</p>
+            <p className="text-sm font-medium text-gray-500">Structured preview</p>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {resumeQuery.data.sections.map((section) => (
+                <div key={section.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{section.type}</p>
+                      <h3 className="mt-1 text-base font-semibold text-gray-900">{section.title}</h3>
+                    </div>
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                      {section.entries?.length ? `${section.entries.length} entries` : `${section.bullets?.length || 0} bullets`}
+                    </span>
+                  </div>
+                  {section.entries?.length > 0 && (
+                    <ul className="mt-3 space-y-1 text-sm text-gray-600">
+                      {section.entries.slice(0, 3).map((entry) => (
+                        <li key={entry.id}>{entry.title}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {section.bullets?.length > 0 && (
+                    <ul className="mt-3 space-y-1 text-sm text-gray-600">
+                      {section.bullets.slice(0, 3).map((bullet) => (
+                        <li key={bullet.id}>{bullet.text}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

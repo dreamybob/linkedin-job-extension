@@ -34,8 +34,38 @@ export async function retryPostAnalysis(id) {
   return data;
 }
 
+export async function fetchPostResumeAnalysis(id) {
+  const { data } = await api.get(`/api/posts/${id}/resume-analysis`);
+  return data;
+}
+
+export async function fetchResumeSuggestions(id, payload) {
+  const { data } = await api.post(`/api/posts/${id}/resume-suggestions`, payload);
+  return data;
+}
+
+export async function applyResumeSuggestion(id, payload) {
+  const { data } = await api.post(`/api/posts/${id}/apply-enhancement`, payload);
+  return data;
+}
+
+export async function revertResumeOverlay(id, payload) {
+  const { data } = await api.post(`/api/posts/${id}/revert-enhancement`, payload);
+  return data;
+}
+
+export async function addResumeTemplate(id, payload) {
+  const { data } = await api.post(`/api/posts/${id}/resume-templates`, payload);
+  return data;
+}
+
 export async function fetchResume() {
   const { data } = await api.get("/api/resume");
+  return data;
+}
+
+export async function fetchStructuredResume() {
+  const { data } = await api.get("/api/resume/structured");
   return data;
 }
 

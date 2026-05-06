@@ -8,11 +8,19 @@ from fastapi.responses import JSONResponse
 
 from database import get_db
 from models.post import PostDetail, PostIngest, PostLabelsUpdate
+from models.resume_review import (
+    ResumeApplyRequest,
+    ResumeRevertRequest,
+    ResumeSuggestionRequest,
+    ResumeTemplateAddRequest,
+)
 from services.background_worker import BackgroundWorker
+from services.resume_review import ResumeReviewService
 
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 worker = BackgroundWorker()
+resume_review_service = ResumeReviewService()
 
 
 def _loads_list(value: str | None) -> list[str]:
@@ -91,8 +99,20 @@ def retry_post(post_id: int, background_tasks: BackgroundTasks) -> dict[str, Any
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Post not found")
+        if row["status"] == "done":
+            resume = resume_review_service._get_latest_resume(db)
+            if not resume:
+                raise HTTPException(status_code=409, detail="Upload a resume before retrying resume review analysis")
+            structured = resume_review_service._ensure_structured_resume(db, resume)
+            resume_review_service._upsert_pending(db, post_id, structured["resume_version"])
+            background_tasks.add_task(
+                resume_review_service.process_review_analysis,
+                post_id,
+                structured["resume_version"],
+            )
+            return {"status": "resume_review_retry_queued", "post_id": post_id}
         if row["status"] != "error":
-            raise HTTPException(status_code=409, detail="Only failed posts can be retried")
+            raise HTTPException(status_code=409, detail="Only failed posts or resume review analysis can be retried")
 
         db.execute(
             "UPDATE posts SET status = 'pending', error_message = NULL WHERE id = ?",
@@ -101,6 +121,38 @@ def retry_post(post_id: int, background_tasks: BackgroundTasks) -> dict[str, Any
 
     background_tasks.add_task(worker.process_post, post_id)
     return {"status": "retry_queued", "post_id": post_id}
+
+
+@router.get("/{post_id}/resume-analysis")
+def get_resume_analysis(post_id: int, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    return resume_review_service.ensure_current(post_id, background_tasks)
+
+
+@router.post("/{post_id}/resume-suggestions")
+def get_resume_suggestions(post_id: int, payload: ResumeSuggestionRequest) -> dict[str, Any]:
+    return resume_review_service.get_suggestions(post_id, payload.target_type, payload.target_id)
+
+
+@router.post("/{post_id}/apply-enhancement")
+def apply_enhancement(post_id: int, payload: ResumeApplyRequest) -> dict[str, Any]:
+    return resume_review_service.apply_suggestion(
+        post_id,
+        payload.suggestion_id,
+        payload.target_type,
+        payload.target_id,
+        payload.destination_section_id,
+        payload.destination_entry_id,
+    )
+
+
+@router.post("/{post_id}/revert-enhancement")
+def revert_enhancement(post_id: int, payload: ResumeRevertRequest) -> dict[str, Any]:
+    return resume_review_service.revert_overlay(post_id, payload.overlay_id)
+
+
+@router.post("/{post_id}/resume-templates")
+def add_resume_template(post_id: int, payload: ResumeTemplateAddRequest) -> dict[str, Any]:
+    return resume_review_service.add_template(post_id, payload.template_type, payload.parent_section_id)
 
 
 @router.get("")

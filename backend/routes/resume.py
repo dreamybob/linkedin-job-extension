@@ -6,9 +6,11 @@ from config import settings
 from database import get_db
 from models.resume import ResumeResponse
 from services.resume_parser import extract_pdf_text
+from services.resume_review import ResumeReviewService
 
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
+resume_review_service = ResumeReviewService()
 
 
 def _serialize_resume(row: dict) -> ResumeResponse:
@@ -36,7 +38,6 @@ async def upload_resume(file: UploadFile = File(...)) -> ResumeResponse:
         raise HTTPException(status_code=400, detail="Failed to extract PDF text") from exc
 
     with get_db() as db:
-        db.execute("DELETE FROM resume")
         db.execute(
             "INSERT INTO resume (filename, raw_text) VALUES (?, ?)",
             (file.filename or "resume.pdf", raw_text),
@@ -44,7 +45,13 @@ async def upload_resume(file: UploadFile = File(...)) -> ResumeResponse:
         row = db.execute(
             "SELECT * FROM resume ORDER BY uploaded_at DESC, id DESC LIMIT 1"
         ).fetchone()
+        resume_review_service._ensure_structured_resume(db, row)
     return _serialize_resume(row)
+
+
+@router.get("/structured")
+def get_structured_resume() -> dict:
+    return resume_review_service.get_structured_resume()
 
 
 @router.get("")
@@ -61,4 +68,3 @@ def delete_resume() -> dict[str, str]:
     with get_db() as db:
         db.execute("DELETE FROM resume")
     return {"status": "deleted"}
-
